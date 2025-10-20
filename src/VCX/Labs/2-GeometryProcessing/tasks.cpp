@@ -1,5 +1,5 @@
 #include <unordered_map>
-
+#include <iostream>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <spdlog/spdlog.h>
 
@@ -34,7 +34,23 @@ namespace VCX::Labs::GeometryProcessing {
                 // Then add the updated vertex into curr_mesh.Positions.
                 auto v           = G.Vertex(i);
                 auto neighbors   = v->Neighbors();
+
                 // your code here:
+                //calculate average neighbors
+                int n = neighbors.size();
+                glm::vec3 E1(0.0f);
+                for (auto v_neighbor : neighbors){
+                    E1 += prev_mesh.Positions[v_neighbor];
+                }
+                float u = (n == 3) ? 3.0/16 : 3.0 / 8 / n;
+                // glm::Vec3 E2(0.0f);
+                // auto faces = v->Faces();
+                // for (auto f : faces){
+                //     E2 += prev_mesh.Positions[f->Center()];
+                // }
+                // from F' = 1/n [ F + 2 average(edges midpoint) + (n-3) average(face centerpoint use gravity center)],
+                auto new_position = prev_mesh.Positions[i] * (-u * n + 1) + E1 * u;
+                curr_mesh.Positions.push_back(new_position);
             }
             // We create an array to store indices of the newly generated vertices.
             // Note: newIndices[i][j] is the index of vertex generated on the "opposite edge" of j-th
@@ -49,6 +65,10 @@ namespace VCX::Labs::GeometryProcessing {
                 if (! eTwin) {
                     // When there is no twin halfedge (so, e is a boundary edge):
                     // your code here: generate the new vertex and add it into curr_mesh.Positions.
+                    auto f1 = e->From(), f2 = e->To();
+                    auto mid = (curr_mesh.Positions[f1] + curr_mesh.Positions[f2]) / 2.0f;
+                    curr_mesh.Positions.push_back(mid);
+                
                 } else {
                     // When the twin halfedge exists, we should also record:
                     //     newIndices[face index][vertex index] = index of the newly generated vertex
@@ -56,6 +76,9 @@ namespace VCX::Labs::GeometryProcessing {
                     //     we have to record twice.
                     newIndices[G.IndexOf(eTwin->Face())][e->TwinEdge()->EdgeLabel()] = curr_mesh.Positions.size();
                     // your code here: generate the new vertex and add it into curr_mesh.Positions.
+                    auto f1 = e->From(), f2 = e->To();
+                    auto mid = (curr_mesh.Positions[f1] + curr_mesh.Positions[f2]) / 2.0f;
+                    curr_mesh.Positions.push_back(mid);
                 }
             }
 
@@ -75,6 +98,10 @@ namespace VCX::Labs::GeometryProcessing {
                 // toInsert[i][j] stores the j-th vertex index of the i-th sub-face.
                 std::uint32_t toInsert[4][3] = {
                     // your code here:
+                    {v0,m2,m1},
+                    {v1,m0,m2},
+                    {v2,m1,m0},
+                    {m0,m1,m2}
                 };
                 // Do insertion.
                 curr_mesh.Indices.insert(
@@ -99,7 +126,7 @@ namespace VCX::Labs::GeometryProcessing {
         // Copy.
         output = input;
         // Reset output.TexCoords.
-        output.TexCoords.resize(input.Positions.size(), glm::vec2 { 0 });
+        output.TexCoords.resize(input.Positions.size(), glm::vec2 { 0.5,0.5 });
 
         // Build DCEL.
         DCEL G(input);
@@ -110,10 +137,40 @@ namespace VCX::Labs::GeometryProcessing {
 
         // Set boundary UVs for boundary vertices.
         // your code here: directly edit output.TexCoords
-
+        std::unordered_map<uint32_t, uint32_t> boundary_vertices; 
+        uint32_t begin_point;
+        for (auto edge_i : G.Edges()) {
+            if (!(edge_i -> TwinEdgeOr(nullptr))) {
+                //is boundary
+                boundary_vertices[edge_i -> From()] = edge_i -> To();
+                begin_point = edge_i -> From();
+            }
+        }
+        // auto bp = begin_point;
+        uint32_t s = boundary_vertices.size();
+        // uint32_t begin_point = boundary_vertices.front()->first;
+        
+        const float pi = 3.14159265358979323846;
+        for (int i = 0;i < s; i ++){
+            output.TexCoords[begin_point] = glm::vec2(std::cos(i*2*pi/s) * 0.5 + 0.5, std::sin(i*2*pi/s) * 0.5 + 0.5);
+            begin_point = boundary_vertices[begin_point];
+        }
+        // if (bp != begin_point){
+        //     std::cout << "error" << std::endl;
+        // }
         // Solve equation via Gauss-Seidel Iterative Method.
+        float lambda = 1.0f;
         for (int k = 0; k < numIterations; ++k) {
             // your code here:
+            for (int i = 0; i < input.Positions.size(); ++i)
+                if (boundary_vertices.find(i) == boundary_vertices.end()){
+                    glm::vec2 g = glm::vec2(0);
+                    for (auto neighbor : G.Vertex(i) -> Neighbors()){
+                        g +=  output.TexCoords[neighbor];
+                    }
+                    g /= G.Vertex(i) -> Neighbors().size();
+                    output.TexCoords[i] = (1-lambda) * output.TexCoords[i] + lambda * g;
+                }
         }
     }
 
@@ -136,9 +193,17 @@ namespace VCX::Labs::GeometryProcessing {
 
         // Compute Kp matrix of the face f.
         auto UpdateQ {
-            [&G, &output] (DCEL::Triangle const * f) -> glm::mat4 {
+            [&G, &output, &input] (DCEL::Triangle const * f) -> glm::mat4 {
                 glm::mat4 Kp;
                 // your code here:
+                auto v0 = input.Positions[f -> VertexIndex(0)];
+                auto v1 = input.Positions[f -> VertexIndex(1)];
+                auto v2 = input.Positions[f -> VertexIndex(2)];
+                auto normal = glm::vec3(glm::cross(v1 - v0, v2 - v0));
+                normal = glm::normalize(normal);
+                float d = - glm::dot(normal, v0);
+                Kp = glm::mat4(normal[0] * glm::vec4(normal, d),normal[1] * glm::vec4(normal, d),normal[2] * glm::vec4(normal, d),
+                              d * glm::vec4(normal, d));
                 return Kp;
             }
         };
@@ -159,7 +224,17 @@ namespace VCX::Labs::GeometryProcessing {
                 glm::mat4 const & Q
             ) -> ContractionPair {
                 // your code here:
-                return {};
+                glm::vec4 p1_ = glm::vec4(p1, 1.0f);
+                glm::vec4 p2_ = glm::vec4(p2, 1.0f);
+                //lambda p1 + (1-lambda) p2;
+                // sum dis^2 = a l^2 + 2 * b l + c
+                auto a = glm::dot(p1_ - p2_, Q * (p1_ - p2_));
+                auto b = glm::dot(p1_, Q * (p1_ - p2_)); // Q^T = Q always
+                auto c = glm::dot(p2_, Q * p2_);
+                auto lambda_best = -b / a;
+                glm::vec4 vprime = lambda_best * p1_ + (1 - lambda_best) * p2_; //齐次坐标
+                auto cost = c - b*b/a;
+                return {edge, vprime, cost};
             }
         };
 
@@ -246,12 +321,22 @@ namespace VCX::Labs::GeometryProcessing {
                 //        update Q matrix of each vertex on the ring (update $Qv$).
                 //     3. Update Q matrix of vertex v1 as well (update $Qv$).
                 //     4. Update $Kf$.
+                auto new_kp = UpdateQ(e->Face());
+                Qv[e->To()] += (new_kp - Kf[G.IndexOf(e->Face())]);
+                Qv[v1] += new_kp;
+                Kf[G.IndexOf(e->Face())] = new_kp;
             }
 
             // Finally, as the Q matrix changed, we should update the relative $ContractionPair$ in $pairs$.
             // Any pair with the Q matrix of its endpoints changed, should be remade by $MakePair$.
             // your code here:
-
+            // 遍历 v1 的所有相邻节点
+            for (auto neighbor : G.Vertex(v1)->Neighbors()) {
+                for (auto edge : G.Vertex(neighbor)->Ring()){
+                    auto make_pair = MakePair(edge, input.Positions[edge->From()], input.Positions[edge->To()], Qv[edge->From()] + Qv[edge->To()]);
+                    pairs.push_back(make_pair);
+                }
+            }
         }
 
         // In the end, we check if the result mesh is watertight and manifold.
