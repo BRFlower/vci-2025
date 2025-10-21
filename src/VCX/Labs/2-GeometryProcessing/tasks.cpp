@@ -196,15 +196,20 @@ namespace VCX::Labs::GeometryProcessing {
             [&G, &output, &input] (DCEL::Triangle const * f) -> glm::mat4 {
                 glm::mat4 Kp;
                 // your code here:
-                auto v0 = input.Positions[f -> VertexIndex(0)];
-                auto v1 = input.Positions[f -> VertexIndex(1)];
-                auto v2 = input.Positions[f -> VertexIndex(2)];
-                auto normal = glm::vec3(glm::cross(v1 - v0, v2 - v0));
-                normal = glm::normalize(normal);
-                float d = - glm::dot(normal, v0);
-                Kp = glm::mat4(normal[0] * glm::vec4(normal, d),normal[1] * glm::vec4(normal, d),normal[2] * glm::vec4(normal, d),
-                              d * glm::vec4(normal, d));
-                return Kp;
+                auto v0 = output.Positions[f -> VertexIndex(0)];
+                auto v1 = output.Positions[f -> VertexIndex(1)];
+                auto v2 = output.Positions[f -> VertexIndex(2)];
+
+                // 计算两条边
+                glm::vec3 e1 = v1 - v0;
+                glm::vec3 e2 = v2 - v0;
+                
+                // 计算法向量
+                glm::vec3 normal = glm::cross(e1, e2)/*/ float(input.Positions.size())*/;
+                
+                float d = -glm::dot(normal, v0);
+                glm::vec4 n(normal, d);
+                return glm::outerProduct(n, n);
             }
         };
 
@@ -224,16 +229,49 @@ namespace VCX::Labs::GeometryProcessing {
                 glm::mat4 const & Q
             ) -> ContractionPair {
                 // your code here:
-                glm::vec4 p1_ = glm::vec4(p1, 1.0f);
-                glm::vec4 p2_ = glm::vec4(p2, 1.0f);
-                //lambda p1 + (1-lambda) p2;
-                // sum dis^2 = a l^2 + 2 * b l + c
-                auto a = glm::dot(p1_ - p2_, Q * (p1_ - p2_));
-                auto b = glm::dot(p1_, Q * (p1_ - p2_)); // Q^T = Q always
-                auto c = glm::dot(p2_, Q * p2_);
-                auto lambda_best = -b / a;
-                glm::vec4 vprime = lambda_best * p1_ + (1 - lambda_best) * p2_; //齐次坐标
-                auto cost = c - b*b/a;
+                auto p1_ = glm::vec4(p1, 1.0f);
+                auto p2_ = glm::vec4(p2, 1.0f);
+                glm::mat4 Q_prime = Q;
+                Q_prime[3] = glm::vec4(0, 0, 0, 1); // 最后一行改为[0 0 0 1]
+                glm::vec4 rhs = glm::vec4(0, 0, 0, 1);
+                // 求解线性方程组 Q' * v = rhs
+                
+                glm::vec4 vprime = glm::inverse(Q_prime) * rhs;
+
+                // 如果矩阵不可逆，使用中点
+                // if (glm::isnan(vprime.x) || glm::isnan(vprime.y) || glm::isnan(vprime.z)) {
+                if (std::abs(glm::determinant(Q_prime) < 1e-3)){
+                // if (true){
+                    vprime = (p1_ + p2_) * 0.5f;
+                    // compare p1_, p2_, vprime
+                    auto d_p1 = glm::dot(p1_, Q * p1_), d_p2 = glm::dot(p2_, Q * p2_), d_mid = glm::dot(vprime, Q * vprime);
+                    if (d_p1 < d_p2 && d_p1 < d_mid) {
+                        vprime = p1_;
+                    } else if (d_p2 < d_p1 && d_p2 < d_mid) {
+                        vprime = p2_;
+                    }
+                                    //lambda p1 + (1-lambda) p2;
+                    // sum dis^2 = a l^2 + 2 * b l + c
+                    // auto a = glm::dot(p1_ - p2_, Q * (p1_ - p2_));
+                    // auto b = glm::dot(p1_, Q * (p1_ - p2_)); // Q^T = Q always
+                    // auto c = glm::dot(p2_, Q * p2_);
+                    // auto lambda_best = 0.5f;
+                    // if (abs(a) > 1e-6)
+                    //     auto lambda_best = -b / a;
+                    // vprime = lambda_best * p1_ + (1 - lambda_best) * p2_; //齐次坐标
+                    // auto cost = c - b*b/a;
+                }
+                else
+                    vprime = glm::inverse(Q_prime) * rhs;
+                    // vprime /= vprime.w;
+                float cost = glm::dot(vprime, Q * vprime);
+                // if (vprime[3] == 0)
+                //     std::cout << "error" << std::endl;
+                // glm::vec4 p1_ = glm::vec4(p1, 1.0f);
+                // glm::vec4 p2_ = glm::vec4(p2, 1.0f);
+
+
+                
                 return {edge, vprime, cost};
             }
         };
@@ -273,6 +311,14 @@ namespace VCX::Labs::GeometryProcessing {
         // Loop until the number of vertices is less than $simplification_ratio * initial_size$.
         while (G.NumOfVertices() > simplification_ratio * Qv.size()) {
             // Find the contractable pair with minimal cost.
+
+            // // 清理无效的pair
+            // pairs.erase(
+            //     std::remove_if(pairs.begin(), pairs.end(), 
+            //         [](const ContractionPair& p) { return p.edge == nullptr; }), 
+            //     pairs.end()
+            // );
+
             std::size_t min_idx = ~0;
             for (std::size_t i = 1; i < pairs.size(); ++i) {
                 if (! pairs[i].edge) continue;
@@ -322,7 +368,9 @@ namespace VCX::Labs::GeometryProcessing {
                 //     3. Update Q matrix of vertex v1 as well (update $Qv$).
                 //     4. Update $Kf$.
                 auto new_kp = UpdateQ(e->Face());
-                Qv[e->To()] += (new_kp - Kf[G.IndexOf(e->Face())]);
+                for (int i = 0; i < 3; i ++)
+                    if (e->Face()->VertexIndex(i) != v1)
+                        Qv[e->Face()->VertexIndex(i)] += (new_kp - Kf[G.IndexOf(e->Face())]);
                 Qv[v1] += new_kp;
                 Kf[G.IndexOf(e->Face())] = new_kp;
             }
@@ -331,10 +379,17 @@ namespace VCX::Labs::GeometryProcessing {
             // Any pair with the Q matrix of its endpoints changed, should be remade by $MakePair$.
             // your code here:
             // 遍历 v1 的所有相邻节点
-            for (auto neighbor : G.Vertex(v1)->Neighbors()) {
-                for (auto edge : G.Vertex(neighbor)->Ring()){
-                    auto make_pair = MakePair(edge, input.Positions[edge->From()], input.Positions[edge->To()], Qv[edge->From()] + Qv[edge->To()]);
-                    pairs.push_back(make_pair);
+            //需要改写的是所有与v1相邻点有关的边
+
+            for (auto e : ring) {
+                // 更新与v1相关的边
+                auto v = e -> To();
+                for (int i = 0; i < pairs.size(); i++){
+                    if (!pairs[i].edge) continue;
+                    auto vf = pairs[i].edge->From(), vt = pairs[i].edge->To();
+                    if (v == vf || v == vt) {
+                        pairs[i] = MakePair(pairs[i].edge, output.Positions[vf], output.Positions[vt], Qv[vf] + Qv[vt]);
+                    }
                 }
             }
         }
@@ -354,7 +409,27 @@ namespace VCX::Labs::GeometryProcessing {
         static constexpr auto GetCotangent {
             [] (glm::vec3 vAngle, glm::vec3 v1, glm::vec3 v2) -> float {
                 // your code here:
-                return 0.0f;
+                v1 -= vAngle;
+                v2 -= vAngle;
+
+                const float eps = 1e-6f;
+                float l1 = glm::length(v1);
+                float l2 = glm::length(v2);
+
+                // if (l1 < eps || l2 < eps) {
+                //     return 0.0f;
+                // }
+
+                // glm::vec3 u1 = v1 / l1;
+                // glm::vec3 u2 = v2 / l2;
+
+                float cosine = glm::dot(v1,v2);
+                float sine = glm::sqrt(glm::dot(glm::cross(v1,v2),glm::cross(v1,v2)));
+                if (sine < eps * glm::abs(cosine)){
+                    return (cosine > 0)?1e2 : -1e2;
+                }
+                float cot = cosine / sine;
+                return cot;
             }
         };
 
@@ -373,8 +448,61 @@ namespace VCX::Labs::GeometryProcessing {
         prev_mesh.Positions = input.Positions;
         for (std::uint32_t iter = 0; iter < numIterations; ++iter) {
             Engine::SurfaceMesh curr_mesh = prev_mesh;
+            auto get_else = [&] (uint32_t a, uint32_t b, const DCEL::Triangle* face){
+                if (face == nullptr)
+                    return a;
+                auto v1 = face -> VertexIndex(0),v2 = face->VertexIndex(1),v3=face->VertexIndex(2);
+                if (v1 != a && v1 != b){
+                    return v1;
+                }
+                else if (v2 != a && v2 != b){
+                    return v2;
+                }
+                else if (v3 != a && v3 != b){
+                    return v3;
+                }
+                else{
+                    throw std::runtime_error("VCX::Labs::GeometryProcessing::SmoothMesh: Invalid triangle vertex configuration");
+                }
+            };
             for (std::size_t i = 0; i < input.Positions.size(); ++i) {
                 // your code here: curr_mesh.Positions[i] = ...
+                
+                float sum_w = 0;
+                auto surround = glm::vec3(0);
+                for (auto m : G.Vertex(i)->Ring()){
+                    auto v = m -> To();
+                    auto f = m -> Face();
+                    auto angle_point = get_else(i,v,f);
+                    float cot;
+                    if (useUniformWeight){
+                        cot = 1;
+                        // sum_w += 1;
+                    }
+                    else{
+                        auto x1 = prev_mesh.Positions[angle_point]-prev_mesh.Positions[i], x2 = prev_mesh.Positions[angle_point] - prev_mesh.Positions[v];
+                        // sum_w += glm::sqrt(glm::dot(glm::cross(x1,x2),glm::cross(x1,x2))) / 3;
+                        cot = -GetCotangent(prev_mesh.Positions[angle_point],prev_mesh.Positions[v],prev_mesh.Positions[i]);
+                        // auto twin = m->TwinEdgeOr(nullptr);
+                        f = m->OppositeFace();
+                        if (f != nullptr) {
+                            angle_point = get_else(i,v,f);
+                            cot += -GetCotangent(prev_mesh.Positions[angle_point],prev_mesh.Positions[v],prev_mesh.Positions[i]);
+                            // cot /= 2;
+                        }
+                        if (cot < 0)
+                            cot = -cot;
+                        // sum_w += cot;
+                    }
+                    sum_w += cot;
+                    surround += cot * (prev_mesh.Positions[v]);
+                }
+                if (glm::abs(sum_w) < 1e-2f)
+                    curr_mesh.Positions[i] = prev_mesh.Positions[i];
+                else{
+                    surround /= sum_w;
+                    curr_mesh.Positions[i] = prev_mesh.Positions[i] * (1-lambda) + surround * lambda; 
+                }
             }
             // Move curr_mesh to prev_mesh.
             prev_mesh.Swap(curr_mesh);
