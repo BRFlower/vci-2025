@@ -12,12 +12,14 @@ namespace VCX::Labs::GeometryProcessing {
     public:
         enum class ImplicitGeometryType {
             Sphere = 0,
-            Torus
+            Torus = 1,
+            Custom = 2
         };
 
-        std::array<std::string_view, 2> _geometryTypeName {
+        std::array<std::string_view, 3> _geometryTypeName {
             "Sphere",
-            "Torus"
+            "Torus",
+            "Custom"
         };
 
         CaseMarchingCubes(Viewer & viewer);
@@ -30,7 +32,7 @@ namespace VCX::Labs::GeometryProcessing {
 
         static float SphereSDF(const glm::vec3 & pos);
         static float TorusSDF(const glm::vec3 & pos);
-
+        static float CustomSDF(const glm::vec3 & pos);
     private:
         Engine::Async<Engine::SurfaceMesh> _task;
         Viewer &                           _viewer;

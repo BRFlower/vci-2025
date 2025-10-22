@@ -516,5 +516,158 @@ namespace VCX::Labs::GeometryProcessing {
     /******************* 5. Marching Cubes *****************/
     void MarchingCubes(Engine::SurfaceMesh & output, const std::function<float(const glm::vec3 &)> & sdf, const glm::vec3 & grid_min, const float dx, const int n) {
         // your code here:
+        output.Positions.clear();
+        output.Indices.clear();
+
+        struct ArrayHash {
+            std::size_t operator()(const std::array<int, 3>& arr) const {
+                std::size_t h1 = std::hash<int>{}(arr[0]);
+                std::size_t h2 = std::hash<int>{}(arr[1]);
+                std::size_t h3 = std::hash<int>{}(arr[2]);
+                return h1 ^ (h2 << 1) ^ (h3 << 2);
+            }
+        };
+        std::unordered_map<std::array<int,3>, uint32_t, ArrayHash> pos_to_idx;
+        uint32_t cnt = 0;
+        auto get_vertex_index = [&sdf, &pos_to_idx, &cnt, &output, &dx, &grid_min] (glm::vec3 pos){
+            glm::vec3 grid_pos = (pos - grid_min) / dx * 2.0f;
+            std::array<int, 3> pos_i = {
+                static_cast<int>(std::round(grid_pos[0])),
+                static_cast<int>(std::round(grid_pos[1])),
+                static_cast<int>(std::round(grid_pos[2]))
+            };
+            auto it = pos_to_idx.find(pos_i);
+            if (it != pos_to_idx.end())
+                return pos_to_idx[pos_i];
+            else{
+                pos_to_idx[pos_i] = cnt;
+                //插值
+                glm::vec3 p1, p2;
+                if (pos_i[0] % 2 == 1){
+                    p1 = pos - glm::vec3(dx * 0.5f, 0, 0);
+                    p2 = pos + glm::vec3(dx * 0.5f, 0, 0);
+                }
+                else if (pos_i[1] % 2 == 1){
+                    p1 = pos - glm::vec3(0, dx * 0.5f, 0);
+                    p2 = pos + glm::vec3(0, dx * 0.5f, 0);
+                }
+                else{
+                    p1 = pos - glm::vec3(0, 0, dx * 0.5f);
+                    p2 = pos + glm::vec3(0, 0, dx * 0.5f);
+                }
+                float x1 = sdf(p1);
+                float x2 = sdf(p2);
+                if (glm::abs(x1-x2) > 1e-6 * x1){
+                    // (1-lambda) x1 + lambda x2 = 0
+                    auto lambda = x1 / (x1 - x2);
+                    pos = (1-lambda) * p1 + lambda * p2;
+                }
+                output.Positions.push_back(pos);
+                return cnt ++;
+            }
+        };
+        auto do_marching = [&dx, &get_vertex_index, &output] (glm::vec3 start_point, uint32_t ref){
+            // auto calculate_position = [&dx, &start_point](uint32_t id_e){
+            //     glm::vec3 cal;
+            //     switch(id_e){
+            //         case 0:
+            //             cal = glm::vec3(1,0,0);
+            //             break;
+            //         case 1:
+            //             cal = glm::vec3(1,2,0);
+            //             break;
+            //         case 2:
+            //             cal = glm::vec3(1,0,2);
+            //             break;
+            //         case 3:
+            //             cal = glm::vec3(1,2,2);
+            //             break;
+            //         case 4:
+            //             cal = glm::vec3(0,1,0);
+            //             break;
+            //         case 5:
+            //             cal = glm::vec3(0,1,2);
+            //             break;
+            //         case 6:
+            //             cal = glm::vec3(2,1,0);
+            //             break;
+            //         case 7:
+            //             cal = glm::vec3(2,1,2);
+            //             break;
+            //         case 8:
+            //             cal = glm::vec3(0,0,1);
+            //             break;
+            //         case 9:
+            //             cal = glm::vec3(2,0,1);
+            //             break;
+            //         case 10:
+            //             cal = glm::vec3(0,2,1);
+            //             break;
+            //         case 11:
+            //             cal = glm::vec3(2,2,1);
+            //             break;
+            //         default:
+            //             spdlog::warn("Error in MarchingCubes.position()");
+            //             cal = glm::vec3(0,0,0);
+            //             break;
+            //     };
+            //     return start_point + 0.5f * dx * cal;
+            // };
+            
+            auto calculate_position = [&dx, &start_point](uint32_t edge_index){
+                // 起始点: v0 + dx * (j & 1) * unit(((j >> 2) + 1) % 3) + dx * ((j >> 1) & 1) * unit(((j >> 2) + 2) % 3)
+                // 方向: unit(j >> 2)
+                
+                glm::vec3 start(0.0f);
+                glm::vec3 direction(0.0f);
+                
+                // 计算起始点
+                int j = edge_index;
+                glm::vec3 v0(0.0f); // 立方体的v0顶点
+                
+                auto unit = [](int i) -> glm::vec3 {
+                    switch(i) {
+                        case 0: return glm::vec3(1, 0, 0);
+                        case 1: return glm::vec3(0, 1, 0);
+                        case 2: return glm::vec3(0, 0, 1);
+                        default: return glm::vec3(0, 0, 0);
+                    }
+                };
+                
+                start = v0 + 
+                    dx * (j & 1) * unit(((j >> 2) + 1) % 3) + 
+                    dx * ((j >> 1) & 1) * unit(((j >> 2) + 2) % 3);
+                
+                // 计算方向
+                direction = unit(j >> 2);
+                
+                glm::vec3 midpoint = start + 0.5f * direction * dx;
+                
+                return start_point + midpoint;
+            };
+            auto triangle_table = c_EdgeOrdsTable[ref];
+            for (int ti = 0; ti < 5; ti++) {
+                int e0 = triangle_table[3 * ti + 0];
+                int e1 = triangle_table[3 * ti + 1];
+                int e2 = triangle_table[3 * ti + 2];
+                
+                if (e0 == -1) break;
+                output.Indices.push_back(get_vertex_index(calculate_position(e0)));
+                output.Indices.push_back(get_vertex_index(calculate_position(e1)));
+                output.Indices.push_back(get_vertex_index(calculate_position(e2)));
+            }
+        };
+        for (int i = 0; i < n-1; i ++){
+            for (int j = 0; j < n-1; j ++){
+                for (int k = 0; k < n-1; k ++){
+                    glm::vec3 start = grid_min + glm::vec3(i * dx, j * dx, k * dx);
+                    uint32_t outside = 0;
+                    for (int u = 0; u < 8; u ++)
+                        outside |= (sdf(start + dx * glm::vec3(u&1, (u>>1)&1, (u>>2)&1)) < 0) << u;
+                    if (outside == 0 || outside == 255) continue;
+                    do_marching(start, outside);
+                }
+            }
+        }
     }
 } // namespace VCX::Labs::GeometryProcessing

@@ -19,6 +19,10 @@ namespace VCX::Labs::GeometryProcessing {
         return sqrt((x - a) * (x - a) + pos.y * pos.y) - r;
     }
 
+    float CaseMarchingCubes::CustomSDF(const glm::vec3 & pos) {
+        // 实现 x4 + y4 + z4 - 0.6 = 0
+        return  pow(pos.x,4)+ pow(pos.y,4) + pow(pos.z,4) - 0.3f;
+    }
     CaseMarchingCubes::CaseMarchingCubes(Viewer & viewer):
         _viewer(viewer) {
         _cameraManager.EnablePan       = false;
@@ -63,6 +67,8 @@ namespace VCX::Labs::GeometryProcessing {
                     MarchingCubes(emptyMesh, SphereSDF, glm::vec3 { -1, -1, -1 }, 2.f / _resolution, _resolution);
                 else if (_type == ImplicitGeometryType::Torus)
                     MarchingCubes(emptyMesh, TorusSDF, glm::vec3 { -1, -1, -1 }, 2.f / _resolution, _resolution);
+                else if (_type == ImplicitGeometryType::Custom)
+                    MarchingCubes(emptyMesh, CustomSDF, glm::vec3 { -1, -1, -1 }, 2.f / _resolution, _resolution);
                 return emptyMesh;
             });
             _running = true;
