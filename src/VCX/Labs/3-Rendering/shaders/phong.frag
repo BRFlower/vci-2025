@@ -38,19 +38,35 @@ uniform sampler2D u_HeightMap;
 
 vec3 Shade(vec3 lightIntensity, vec3 lightDir, vec3 normal, vec3 viewDir, vec3 diffuseColor, vec3 specularColor, float shininess) {
     // your code here:
-    lightDir = normalize(lightDir), viewDir = normalize(viewDir), normal = normalize(normal);
-    float cos3 = (u_UseBlinn) ? dot(normalize(viewDir + lightDir), normal) : dot(viewDir, normalize(2 * dot(normal, lightDir) * normal - lightDir));
-    return lightIntensity * dot(lightDir, normal) * diffuseColor + lightIntensity * pow(max(cos3, 0), shininess) * specularColor;
+    // lightDir = normalize(lightDir), viewDir = normalize(viewDir), normal = normalize(normal);
+    float cos3 = (u_UseBlinn)? dot(normalize(viewDir + lightDir), normal) : dot(viewDir, normalize(2 * dot(normal, lightDir) * normal - lightDir));
+    return lightIntensity * max(dot(lightDir, normal),0) * diffuseColor + lightIntensity * pow(max(cos3, 0), shininess) * specularColor;
 }
 
 vec3 GetNormal() {
     // Bump mapping from paper: Bump Mapping Unparametrized Surfaces on the GPU
     vec3 vn = normalize(v_Normal);
-
     // your code here:
-    vec3 bumpNormal = vn;
-
-    return bumpNormal != bumpNormal ? vn : normalize(vn * (1. - u_BumpMappingBlend) + bumpNormal * u_BumpMappingBlend);
+    if (u_BumpMappingBlend > 0.0){
+    //if (false){ }
+        // use Bump mapping
+        // orginal normal is v_Normal
+        float height = texture(u_HeightMap, v_TexCoord).r;
+        // HeightMap use TexCoord as coordinates
+        float hDx = dFdx(height);
+        float hDy = dFdy(height);
+        // calculate on GPU ,compare with nearby pixels
+        vec3 pos_dx = dFdx(v_Position);
+        vec3 pos_dy = dFdy(v_Position);
+        
+        vec3 tangent = pos_dx + vn * hDx;
+        vec3 bitangent = pos_dy + vn * hDy;
+        vec3 bumpNormal = normalize(cross(tangent, bitangent));
+        return normalize(mix(vn, bumpNormal, u_BumpMappingBlend));
+    }
+    else{
+        return vn;
+    }
 }
 
 void main() {
