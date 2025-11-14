@@ -27,9 +27,22 @@ layout(std140) uniform PassConstants {
 uniform vec3 u_CoolColor;
 uniform vec3 u_WarmColor;
 
+uniform float s1 = 0.6, s2 = -0.2;
+uniform float s3 = 0.2; // average of s1,s2
+
 vec3 Shade (vec3 lightDir, vec3 normal) {
     // your code here:
-    return vec3(0);
+    float ans = dot(normal, lightDir);
+    if (ans > s1) {
+        return u_WarmColor;
+    }
+    else if (ans < s2){
+        return u_CoolColor;
+    }
+    else{
+        return (u_WarmColor * (1 - s3) + u_CoolColor * (1 + s3)) * 0.5;
+    }
+    //return vec3(0);
 }
 
 void main() {
