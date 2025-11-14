@@ -1,4 +1,4 @@
-Task 1: Phong Illumination
+## Task 1: Phong Illumination
 
 物体颜色由两部分组成：漫反射和高光
 
@@ -18,7 +18,7 @@ bonus:深度贴图
 
 根据u_BumpMappingBlend的比例将原来的normal与计算的BumpNormal进行混合
 
-Task 2: Environment Mapping
+## Task 2: Environment Mapping
 
 天空盒渲染：用前后左右上下六张贴图构建环绕背景
 
@@ -42,7 +42,7 @@ u_View 矩阵结构（4x4）:
 环境映射：
 需要渲染物体上一个点的反射，通过该点到相机的方向viewDir作为反射光以及表面法向normal推得入射光方向（实际计算中，由光路可逆用-viewDir计算射向背景的方向），最后调用该方向的texture纹理，乘以u_EnvironmentScale反射强度，得到反射的颜色。
 
-Task 3:
+## Task 3: Non-Photorealistic Rendering
 
 渲染轮廓线：先变换得到相机空间中的物体坐标以及法线信息，然后将每个点按照法线方向进行偏移u_LineWidth(用u_ScreenWidth,ScreenHeight等矫正)，原物体网格加上offset偏移作为“背面”渲染
 
@@ -51,3 +51,15 @@ Task 3:
 1. 渲染模型正反面：CaseNonPhoto.cpp中在81-87行进行背面渲染，剔除正面，_backLineProgram.Use()调用npr-line着色器。效果是渲染了白色的更大的背面，但是原来就显露的部分（正面）在更近处渲染黑色覆盖，只留下边缘线
 
 2. 除以u_ScreenWidth,ScreenHeight:用屏幕宽度归一化，使得投影渲染到相机（中间会放大屏幕分辨率倍）上offset对应的宽度为与分辨率无关的常数；乘clipPos.w景深是为了让近处放大倍数更小远处放大倍数更大，投影后在图片上显示的宽度一致
+
+
+## Task 4: Shadow Mapping
+
+1. 有向光源属于平行光，物体投影前后大小不变，使用正交投影矩阵；点光源使用透视投影，光线从一点发出有发散特性；对于立方体贴图，要对六个面各自透视投影
+
+2. 在顶点着色器中已经计算了各顶点的深度，颜色等信息，而像素着色器会自动调用顶点着色器的结果插值得到当前像素的深度信息。
+
+## Task 5: Whitted-Style Ray Tracing
+
+1. 光线追踪和光栅化的渲染结果都考虑了物体之间的相互作用，区别在于光线追踪是计算每个像素点代表的从相机出发的射线打到物体上所获得的颜色，可以通过提高反射的次数来几乎无上限地提升渲染的真实性；
+而光栅化像是画画，计算屏幕上的每一块区域是由哪一个三角形面片提供的，然后考虑环境光，反射等对三角形颜色的影响属于物理模拟。
