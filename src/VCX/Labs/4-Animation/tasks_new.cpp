@@ -17,6 +17,9 @@ namespace VCX::Labs::Animation {
         
         for (int i = StartIndex; i < ik.JointLocalOffset.size(); i++) {
             // your code here: forward kinematics, update JointGlobalPosition and JointGlobalRotation
+            // rotation(auto calculation) :   glm::quat * glm::vec3   
+            ik.JointGlobalPosition[i] = ik.JointGlobalRotation[i-1] * ik.JointLocalOffset[i] + ik.JointGlobalPosition[i - 1];
+            ik.JointGlobalRotation[i] = ik.JointGlobalRotation[i - 1] * ik.JointLocalRotation[i];
         }
     }
 
@@ -25,6 +28,25 @@ namespace VCX::Labs::Animation {
         // These functions will be useful: glm::normalize, glm::rotation, glm::quat * glm::quat
         for (int CCDIKIteration = 0; CCDIKIteration < maxCCDIKIteration && glm::l2Norm(ik.EndEffectorPosition() - EndPosition) > eps; CCDIKIteration++) {
             // your code here: ccd ik
+            for (int i = ik.JointLocalOffset.size()-2; i >= 0; i --){
+                auto rt0 = (i == 0) ? glm::quat(1,0,0,0) : ik.JointGlobalRotation[i-1];
+                auto rt0_ = glm::inverse(rt0);
+                auto vec1 = glm::normalize(rt0_ * (ik.JointGlobalPosition[ik.JointLocalOffset.size()-1] - ik.JointGlobalPosition[i]));
+                auto vec0 = glm::normalize(rt0_ * (EndPosition - ik.JointGlobalPosition[i]));
+                // r * vec1 * r.inv  parrallels to vec0
+
+                // auto vm = normalize(glm::cross(vec1, vec0));
+                // float dot = glm::dot(vec1, vec0);
+                // if (dot > 0.9999f)
+                //     continue;
+                // auto theta = float(acos(dot));
+                // auto r = glm::angleAxis(theta, vm);
+                auto r = glm::rotation(vec1, vec0);
+                ik.JointLocalRotation[i] = glm::normalize(r * ik.JointLocalRotation[i]);
+                // ForwardKinematics(ik, i);
+                ik.JointGlobalPosition[ik.JointLocalOffset.size()-1] = ik.JointGlobalPosition[i] + rt0 * r * rt0_ * (ik.JointGlobalPosition[ik.JointLocalOffset.size()-1] - ik.JointGlobalPosition[i]);
+            }
+            ForwardKinematics(ik, 0);
         }
     }
 
@@ -40,6 +62,9 @@ namespace VCX::Labs::Animation {
 
             for (int i = nJoints - 2; i >= 0; i--) {
                 // your code here
+                auto dir = glm::normalize(next_position - ik.JointGlobalPosition[i]);
+                backward_positions[i] = next_position - dir * ik.JointOffsetLength[i+1];
+                next_position = backward_positions[i];
             }
 
             // forward update
@@ -47,6 +72,9 @@ namespace VCX::Labs::Animation {
             forward_positions[0] = ik.JointGlobalPosition[0];
             for (int i = 0; i < nJoints - 1; i++) {
                 // your code here
+                auto dir = glm::normalize(backward_positions[i + 1] - now_position);
+                forward_positions[i + 1] = forward_positions[i] + dir * ik.JointOffsetLength[i+1];
+                now_position = forward_positions[i + 1];
             }
             ik.JointGlobalPosition = forward_positions; // copy forward positions to joint_positions
         }
@@ -61,19 +89,49 @@ namespace VCX::Labs::Animation {
         }
         ForwardKinematics(ik, 0);
     }
+    
+    glm::vec3 L(float t, glm::vec3 p1, glm::vec3 p2) {
+        return p1 * (1-t) + p2 * t;
+    }
+    glm::vec3 circ(float t, glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, float theta1, float theta2, float scale = 1){ // theta1 * scale
+        float q = theta1 * scale * (1-t) + theta2 * scale * t;
+        return p0 + p1 * cos(q) + p2 * sin(q);
+    }
+    std::shared_ptr<std::vector<glm::vec3>> character(int nums){
+        using Vec3Arr = std::vector<glm::vec3>;
+        nums /= 32;
+        std::shared_ptr<Vec3Arr> custom(new Vec3Arr(nums * 32));
+        int index = 0;
+        for (int i = 0; i < 10 * nums; i ++)
+            (*custom)[index++] = L(i / (10.0 * nums), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
+        
+        for (int i = 0; i < 2 * nums; i ++)
+            (*custom)[index++] = L(i / (2.0 * nums), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.2f));
+        
+        for (int i = 0; i < 7 * nums; i ++)
+            (*custom)[index++] = circ(i / (7.0 * nums), glm::vec3(-0.25f, 0.0f, 0.2f), glm::vec3(0.25f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.25f), 0, 1, 3.14159);
 
+        for (int i = 0; i < 2 * nums; i ++)
+            (*custom)[index++] = L(i / (2.0 * nums), glm::vec3(-0.5f, 0.0f, 0.2f), glm::vec3(-0.5f, 0.0f, 0.0f));
+        for (int i = 0; i < 2 * nums; i ++)
+            (*custom)[index++] = L(i / (2.0 * nums), glm::vec3(-0.5f, 0.0f, 0.0f), glm::vec3(-0.5f, 0.0f, 0.2f));
+        
+        for (int i = 0; i < 7 * nums; i ++)
+            (*custom)[index++] = circ(i / (7.0 * nums), glm::vec3(-0.75f, 0.0f, 0.2f), glm::vec3(0.25f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.25f), 0, 1, 3.14159);
+        
+        for (int i = 0; i < 2 * nums; i ++)
+            (*custom)[index++] = L(i / (2.0 * nums), glm::vec3(-1.0f, 0.0f, 0.2f), glm::vec3(-1.0f, 0.0f, 0.0f));
+        return custom;
+    }
     IKSystem::Vec3ArrPtr IKSystem::BuildCustomTargetPosition() {
         // get function from https://www.wolframalpha.com/input/?i=Albert+Einstein+curve
         int nums = 5000;
         using Vec3Arr = std::vector<glm::vec3>;
-        std::shared_ptr<Vec3Arr> custom(new Vec3Arr(nums));
-        int index = 0;
-        for (int i = 0; i < nums; i++) {
-            float x_val = 1.5e-3f * custom_x(92 * glm::pi<float>() * i / nums);
-            float y_val = 1.5e-3f * custom_y(92 * glm::pi<float>() * i / nums);
-            if (std::abs(x_val) < 1e-3 || std::abs(y_val) < 1e-3) continue;
-            (*custom)[index++] = glm::vec3(1.6f - x_val, 0.0f, y_val - 0.2f);
-        }
+        // std::shared_ptr<Vec3Arr> custom(new Vec3Arr(nums * 32));
+        // int index = 0;
+        std::shared_ptr<Vec3Arr> custom = character(320);
+        int index = 320;
+        
         custom->resize(index);
         return custom;
     }

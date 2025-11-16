@@ -1,0 +1,25 @@
+## Task 1:逆动力学
+
+### sub-task 1 前向更新
+
+计算每个关节在地面参照系下的旋转和平移（即机械臂矢量）
+
+对于第i个关节相对于第i-1个关节（平行于地面参照系），平移向量为r_{ii-1}旋转i-1关节的地面系旋转GlobalRotation\[i-1\];旋转向量为GlobalRotation\[i-1\]叠加i关节的旋转，在四元数的计算体系中可直接相乘，满足结合律
+
+### sub-task 2 CCD IK算法
+
+思路：多次迭代，每次从末端往前，依次旋转当前关节i，使得末端离目标点最接近，实际上就是旋转向量GlobalOffset\[-1\] - GlobalOffset\[i\]与目标向量EndPosition - GlobalOffset\[i\]平行，通过glm::rotation(vec1,vec2)直接计算旋转减小误差
+
+理论上每次更新i关节的旋转，都要重新计算前向动力学 ForwardKinematics，比较浪费，实际上每一次迭代的循环中只会用到JointRotation\[-1\]，可用```JointGlobalPosition[ik.JointLocalOffset.size()-1] = ik.JointGlobalPosition[i] + rt0 * r * rt0_ * (ik.JointGlobalPosition[ik.JointLocalOffset.size()-1] - ik.JointGlobalPosition[i]);```直接更新末端，等到循环结束一并更新所有的Offset和Rotation
+
+### sub-tank 3 FABR IK 算法
+
+FABRIK算法应用了一种“牵拉”的思想，每次迭代进行后向和前向两次更新：
+
+第一步后向，把终点放在目标点，然后为了保持机械臂长度约束，将前一个点往目标点移动使得机械臂长度不变，以此类推；最终起始点会离原来的起始点一定距离
+
+第二步前向，把起点放在正确的位置修复约束，然后为了保持机械臂长度约束，将后一个点往目标点移动使得机械臂长度不变，以此类推，最后机械臂末端离目标点会有一个更小的误差。
+
+多次迭代以满足目标精度。对于连续运动学约束，初始值采用上一帧的位置，很容易在短时间内得到很高精度的结果，而且关节旋转少，稳定性很好
+
+### sub-task 4 自定义曲线
