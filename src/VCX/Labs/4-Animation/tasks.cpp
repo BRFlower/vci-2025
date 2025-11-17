@@ -127,11 +127,51 @@ namespace VCX::Labs::Animation {
         // get function from https://www.wolframalpha.com/input/?i=Albert+Einstein+curve
         int nums = 5000;
         using Vec3Arr = std::vector<glm::vec3>;
-        // std::shared_ptr<Vec3Arr> custom(new Vec3Arr(nums * 32));
-        // int index = 0;
-        std::shared_ptr<Vec3Arr> custom = character(320);
-        int index = 320;
-        
+        // std::shared_ptr<Vec3Arr> custom = character(32 * 50);
+        // int index = 32 * 50;
+        std::shared_ptr<Vec3Arr> custom(new Vec3Arr(int(nums*1.01)));
+        int index = 0;
+        // std::shared_ptr<Vec3Arr> custom = character(320);
+        // int index = 320;
+        // check step nums/5;
+
+        ///*
+        float check[nums / 5];
+        auto p0 = glm::vec3(glm::vec3(custom_x(0), 0.0, custom_y(0)));
+        float avg = 0;
+        for (int i = 1; i < nums / 5; i ++){
+            auto p1 = glm::vec3(custom_x(92 * glm::pi<float>() * i*5 / nums), 0.0, custom_y(92 * glm::pi<float>() * i*5 / nums));
+            check[i] =  glm::length(p1 - p0);
+            p0 = p1;
+            avg += check[i];
+        }
+        check[0] = check[1];
+        avg /= nums / 5;
+        //normalize
+        for (int i = 0; i < nums / 5; i++){
+            check[i] = glm::clamp(avg / check[i], 0.1f, 10.0f);
+        }
+        //clamp too much
+        avg = 0;
+        for (int i = nums / 5 - 1; i >= 0; i--){
+            if (check[i] == 10)
+                check[i] = (i + 1 == nums / 5)? 1 : check[i + 1];
+        }
+        for (float i = 0;i < nums;) {
+            float x_val = 1.5e-3f * custom_x(92 * glm::pi<float>() * i / nums);
+            float y_val = 1.5e-3f * custom_y(92 * glm::pi<float>() * i / nums);
+            i += check[int(i / 5)];
+            if (std::abs(x_val) < 1e-3 || std::abs(y_val) < 1e-3) continue;
+            (*custom)[index++] = glm::vec3(1.6f - x_val, 0.0f, y_val - 0.2f);
+        }
+        //*/
+
+        // for (int i = 0; i < nums; i++) {
+        //     float x_val = 1.5e-3f * custom_x(92 * glm::pi<float>() * i / nums);
+        //     float y_val = 1.5e-3f * custom_y(92 * glm::pi<float>() * i / nums);
+        //     if (std::abs(x_val) < 1e-3 || std::abs(y_val) < 1e-3) continue;
+        //     (*custom)[index++] = glm::vec3(1.6f - x_val, 0.0f, y_val - 0.2f);
+        // }
         custom->resize(index);
         return custom;
     }
