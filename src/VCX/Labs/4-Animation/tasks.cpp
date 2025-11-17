@@ -204,25 +204,75 @@ namespace VCX::Labs::Animation {
 
     void AdvanceMassSpringSystem(MassSpringSystem & system, float const dt) {
         // your code here: rewrite following code
+        const int n = system.Positions.size();
+        if (n == 0) return;
+
         int const steps = 1000;
         float const ddt = dt / steps; 
         for (std::size_t s = 0; s < steps; s++) {
-            std::vector<glm::vec3> forces(system.Positions.size(), glm::vec3(0));
-            for (auto const spring : system.Springs) {
-                auto const p0 = spring.AdjIdx.first;
+
+            std::vector<glm::vec3> forces(n, glm::vec3(0));
+
+            // spring
+            for (auto const& spring : system.Springs){
+                const auto p0 = spring.AdjIdx.first;
                 auto const p1 = spring.AdjIdx.second;
-                glm::vec3 const x01 = system.Positions[p1] - system.Positions[p0];
-                glm::vec3 const v01 = system.Velocities[p1] - system.Velocities[p0];
-                glm::vec3 const e01 = glm::normalize(x01);
-                glm::vec3 f = (system.Stiffness * (glm::length(x01) - spring.RestLength) + system.Damping * glm::dot(v01, e01)) * e01;
+
+                const glm::vec3 vec_01 = system.Positions[p1] - system.Positions[p0];
+                const float len = glm::length(vec_01);
+                if (len < 1e-6f) continue;
+                const glm::vec3 e01 = vec_01 / len;
+                const glm::vec3 f = e01 * system.Stiffness * (len - spring.RestLength); // force p0 to p1
                 forces[p0] += f;
                 forces[p1] -= f;
             }
-            for (std::size_t i = 0; i < system.Positions.size(); i++) {
-                if (system.Fixed[i]) continue;
-                system.Velocities[i] += (glm::vec3(0, -system.Gravity, 0) + forces[i] / system.Mass) * ddt;
-                system.Positions[i] += system.Velocities[i] * ddt;
+
+            //gravity
+            for (std::size_t i = 0; i < n; i ++){
+                if (!system.Fixed[i]){
+                    forces[i].y -= system.Mass * system.Gravity;
+                }
             }
+            // construct AX = b
+            std::vector<Eigen::Triplet<float>> triplets;
+            Eigen::VectorXf  b(3 * n);
+            for (int i = 0; i < n; i ++){
+                if (!system.Fixed[i])
+                    for (int j = 0; j < 3; j ++)
+                        triplets.emplace_back(3 * i + j , 3 * i + j, system.Mass);
+                else
+                    for (int j = 0; j < 3; j ++)
+                        triplets.emplace_back(3 * i + j , 3 * i + j, 1e6f); 
+            }
+            for (int i = 0; i < n; i ++){
+                if (!system.Fixed[i])
+                    b.segment<3>(3 * i) = ddt * glm2eigen({forces[i]});
+                else{
+                    b.segment<3>(3 * i) = Eigen::Vector3f(
+                        1e6f * system.Positions[i].x,
+                        1e6f * system.Positions[i].y,
+                        1e6f * system.Positions[i].z
+                    );
+                }
+            }
+
+            Eigen::SparseMatrix<float> A(3 * n, 3 * n);
+
+            A.setFromTriplets(triplets.begin(), triplets.end());
+            Eigen::VectorXf delta_v = ComputeSimplicialLLT(A, b);
+
+            // update
+            for (int i  = 0; i < n; i ++)
+                if (!system.Fixed[i]){
+                    system.Velocities[i].x += delta_v(3 * i);
+                    system.Velocities[i].y += delta_v(3 * i + 1);
+                    system.Velocities[i].z += delta_v(3 * i + 2);
+
+                    system.Positions[i].x += ddt * system.Velocities[i].x;
+                    system.Positions[i].y += ddt * system.Velocities[i].y;
+                    system.Positions[i].z += ddt * system.Velocities[i].z;
+                }
+
         }
     }
 }
