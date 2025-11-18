@@ -211,66 +211,54 @@ namespace VCX::Labs::Animation {
         float const ddt = dt / steps; 
         for (std::size_t s = 0; s < steps; s++) {
 
-            std::vector<glm::vec3> forces(n, glm::vec3(0));
-
-            // spring
-            for (auto const& spring : system.Springs){
-                const auto p0 = spring.AdjIdx.first;
-                auto const p1 = spring.AdjIdx.second;
-
-                const glm::vec3 vec_01 = system.Positions[p1] - system.Positions[p0];
-                const float len = glm::length(vec_01);
-                if (len < 1e-6f) continue;
-                const glm::vec3 e01 = vec_01 / len;
-                const glm::vec3 f = e01 * system.Stiffness * (len - spring.RestLength); // force p0 to p1
-                forces[p0] += f;
-                forces[p1] -= f;
-            }
-
-            //gravity
-            for (std::size_t i = 0; i < n; i ++){
-                if (!system.Fixed[i]){
-                    forces[i].y -= system.Mass * system.Gravity;
-                }
-            }
-            // construct AX = b
             std::vector<Eigen::Triplet<float>> triplets;
             Eigen::VectorXf  b(3 * n);
+            
+            //construct AX = B
+            //X_k+1 = X_k
+            Eigen::VectorXf mass(n);
+            for (int i = 0; i < n; i ++)
+                mass[i] = (system.Fixed[i])? 1e6 : system.Mass[i];
             for (int i = 0; i < n; i ++){
-                if (!system.Fixed[i])
-                    for (int j = 0; j < 3; j ++)
-                        triplets.emplace_back(3 * i + j , 3 * i + j, system.Mass);
-                else
-                    for (int j = 0; j < 3; j ++)
-                        triplets.emplace_back(3 * i + j , 3 * i + j, 1e6f); 
+                for (int j = 0; j < n; j ++)
+                    triplets.push_back(Eigen::Triplet<float>(3 * i + j, 3 * i + j, mass[i]));
             }
-            for (int i = 0; i < n; i ++){
-                if (!system.Fixed[i])
-                    b.segment<3>(3 * i) = ddt * glm2eigen({forces[i]});
-                else{
-                    b.segment<3>(3 * i) = Eigen::Vector3f(
-                        1e6f * system.Positions[i].x,
-                        1e6f * system.Positions[i].y,
-                        1e6f * system.Positions[i].z
-                    );
+            for (int i = 0; i < n; i ++)
+                b[3 * i + 1] += ddt * -system.Gravity * (system.Fixed[i])? 0 : mass[i];
+
+            for (auto const spring : system.Springs) {
+                auto const p0 = spring.AdjIdx.first;
+                auto const p1 = spring.AdjIdx.second;
+                glm::vec3 const x01 = system.Positions[p1] - system.Positions[p0];
+                // glm::vec3 const v01 = system.Velocities[p1] - system.Velocities[p0];
+                glm::vec3 const e01 = glm::normalize(x01);
+                for (int i = 0; i < 3; i ++)
+                    for (int j = 0; j < 3; j ++){
+                        triplets.push_back(Eigen::Triplet<float>(3 * p0 + i, 3 * p0 + j, ddt * ddt * spring.Stiffness * e01[i] * e01[j]));
+                        triplets.push_back(Eigen::Triplet<float>(3 * p0 + i, 3 * p1 + j, -ddt * ddt * spring.Stiffness * e01[i] * e01[j]));
+                        triplets.push_back(Eigen::Triplet<float>(3 * p1 + i, 3 * p0 + j, -ddt * ddt * spring.Stiffness * e01[i] * e01[j]));
+                        triplets.push_back(Eigen::Triplet<float>(3 * p1 + i, 3 * p1 + j, ddt * ddt * spring.Stiffness * e01[i] * e01[j]));
+                    }
+                float f = ddt * ddt * spring.Stiffness * (glm::length(x01) - spring.RestLength);
+                for (int i = 0; i < 3; i ++){
+                    b[3 * p0 + i] += f * e01[i];
+                    b[3 * p1 + i] -= f * e01[i];
                 }
             }
-
-            Eigen::SparseMatrix<float> A(3 * n, 3 * n);
-
+        
             A.setFromTriplets(triplets.begin(), triplets.end());
-            Eigen::VectorXf delta_v = ComputeSimplicialLLT(A, b);
+            Eigen::VectorXf delta_x = ComputeSimplicialLLT(A, b);
 
             // update
             for (int i  = 0; i < n; i ++)
                 if (!system.Fixed[i]){
-                    system.Velocities[i].x += delta_v(3 * i);
-                    system.Velocities[i].y += delta_v(3 * i + 1);
-                    system.Velocities[i].z += delta_v(3 * i + 2);
+                    system.Positions[i].x += delta_x(3 * i);
+                    system.Positions[i].y += delta_x(3 * i + 1);
+                    system.Positions[i].z += delta_x(3 * i + 2);
 
-                    system.Positions[i].x += ddt * system.Velocities[i].x;
-                    system.Positions[i].y += ddt * system.Velocities[i].y;
-                    system.Positions[i].z += ddt * system.Velocities[i].z;
+                    system.Velocities[i].x += delta_x(3 * i) / ddt;
+                    system.Velocities[i].y += delta_x(3 * i + 1) / ddt;
+                    system.Velocities[i].z += delta_x(3 * i + 2) / ddt;
                 }
 
         }

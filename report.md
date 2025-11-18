@@ -47,3 +47,42 @@ FABRIK算法应用了一种“牵拉”的思想，每次迭代进行后向和�
 
 3 本质上是解决时间上位姿不连续的问题，FABR IK是使用连续帧的稳定算法效果更好；进一步地，可以限制关节的旋转速度，即两帧之间角度变化不超过阈值；考虑输入的波动，或许对结果插值和滤波是有用的做法
 
+
+Task2 弹簧质点系统
+
+隐式欧拉方法：
+
+
+$$
+\begin{gathered}
+\begin{cases}
+X_{k+1} = X_{k} + hV_{k+1} \\
+V_{k+1} = V_{k} + hM^{-1}f(X_{k+1})
+\end{cases}\\
+希望把f(X_{k+1})表示成X_{k+1}的线性组合\\
+MX_{k+1} = h^{2}f(X_{k+1})+M(hV_{k}+X_{k})
+为了表示成矩阵，X_{k+1}变成3*n向量，第3*i+j表示第i点的j维\\
+\\
+移项构造A(X_{k+1}-X_{k}) = B:\\
+MX_{k+1},MX_{k}贡献：A加上质量矩阵M\\
+MhV_{k}贡献：B加上MhV_{k}\\
+重力贡献项：B加上向量 h^{2} * g * Mass_{i}\\
+弹簧弹力项：需要用X_{k+1}的一阶线性表示\\
+f(X) = - \nabla E(X) \implies f(X_{k+1}) = f(X_{k}) + \nabla f(X_{k}) (X_{k+1}-X_{k})\\
+其中\nabla f(X_{k}) = −\nabla^{2}E(X_{k})=-H_{E}(X_{k})要算海森矩阵\\
+~~即A加上h^{2}H_{E}，B加上h^{2}f(X_{k})
+弹簧x_{i} \sim x_{j}的贡献 E = \frac{1}{2}k(||x_{i}-x_{j}|| - l_{0})^{2}平方根计算困难，\\
+进行方向冻结-只保留x_{i}-x_{j}方向的距离变化，并只计算这个方向的力\\
+E = \frac{1}{2} k(d^{T}(x_{i}-x_{j})-l_{0})^{2}其中d是x_{i}-x_{j}的方向向量，在求导中视为常数\\
+于是E是关于X (3*n向量)的正定二次型，容易计算海森矩阵,每个弹簧对H的贡献是\begin{pmatrix}
+\frac{\partial^{2}E}{\partial X_{i}\partial X_{i}} & \frac{\partial^{2}E}{\partial X_{i}\partial X_{j}} \\
+\frac{\partial^{2}E}{\partial X_{j}\partial X_{i}} & \frac{\partial^{2}E}{\partial X_{j}\partial X_{j}}
+\end{pmatrix}\begin{pmatrix}
+dd^{T} & -dd^{T} \\
+-dd^{T} & dd^{T}
+\end{pmatrix}\\
+综上,h^{2}f(X_{k+1})贡献是B加上h^{2}f(X_{k})，A加上h^{2}H
+\end{gathered}
+$$
+
+
