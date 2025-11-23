@@ -74,10 +74,10 @@ f(X) = - \nabla E(X) \implies f(X_{k+1}) = f(X_{k}) + \nabla f(X_{k}) (X_{k+1}-X
 弹簧x_{i} \sim x_{j}的贡献 E = \frac{1}{2}k(||x_{i}-x_{j}|| - l_{0})^{2}平方根计算困难，\\
 进行方向冻结-只保留x_{i}-x_{j}方向的距离变化，并只计算这个方向的力\\
 E = \frac{1}{2} k(d^{T}(x_{i}-x_{j})-l_{0})^{2}其中d是x_{i}-x_{j}的方向向量，在求导中视为常数\\
-于是E是关于X (3*n向量)的正定二次型，容易计算海森矩阵,每个弹簧对H的贡献是\begin{pmatrix}
+于是E是关于X (3*n向量)的正定二次型，容易计算海森矩阵,每个弹簧对H的贡献是k\begin{pmatrix}
 \frac{\partial^{2}E}{\partial X_{i}\partial X_{i}} & \frac{\partial^{2}E}{\partial X_{i}\partial X_{j}} \\
 \frac{\partial^{2}E}{\partial X_{j}\partial X_{i}} & \frac{\partial^{2}E}{\partial X_{j}\partial X_{j}}
-\end{pmatrix}\begin{pmatrix}
+\end{pmatrix}=k\begin{pmatrix}
 dd^{T} & -dd^{T} \\
 -dd^{T} & dd^{T}
 \end{pmatrix}\\
@@ -85,4 +85,13 @@ dd^{T} & -dd^{T} \\
 \end{gathered}
 $$
 
+加上阻尼项 $F_d = -c * v$，左边加上h * c
 
+在隐式欧拉方法下，step取10已经能够达到不错效果，帧率在47左右。
+
+
+update：改用讲义上的$H_E$，效果似乎差不多，帧率还降了一点，或许需要更低的step来体现
+
+step = 3时fps=60
+
+![[img4.png]]

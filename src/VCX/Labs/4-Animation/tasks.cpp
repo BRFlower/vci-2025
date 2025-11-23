@@ -207,7 +207,8 @@ namespace VCX::Labs::Animation {
         const int n = system.Positions.size();
         if (n == 0) return;
 
-        int const steps = 1000;
+        // int const steps = 1000;
+        int const steps = 3;
         float const ddt = dt / steps; 
         for (std::size_t s = 0; s < steps; s++) {
 
@@ -218,34 +219,55 @@ namespace VCX::Labs::Animation {
             //X_k+1 = X_k
             Eigen::VectorXf mass(n);
             for (int i = 0; i < n; i ++)
-                mass[i] = (system.Fixed[i])? 1e6 : system.Mass[i];
+                mass[i] = (system.Fixed[i])? 1e6 : system.Mass;
             for (int i = 0; i < n; i ++){
-                for (int j = 0; j < n; j ++)
-                    triplets.push_back(Eigen::Triplet<float>(3 * i + j, 3 * i + j, mass[i]));
+                for (int j = 0; j < 3; j ++)
+                    triplets.push_back(Eigen::Triplet<float>(3 * i + j, 3 * i + j, mass[i] + ddt * system.Damping));
             }
-            for (int i = 0; i < n; i ++)
-                b[3 * i + 1] += ddt * -system.Gravity * (system.Fixed[i])? 0 : mass[i];
-
+            for (int i = 0; i < n; i++) {
+                if (!system.Fixed[i]) {
+                    // h * M * v_k 项
+                    b.segment<3>(3 * i) = ddt * Eigen::Vector3f(
+                        system.Mass * system.Velocities[i].x,
+                        system.Mass * system.Velocities[i].y,
+                        system.Mass * system.Velocities[i].z
+                    );
+                    
+                    // h² * 重力项
+                    b[3 * i + 1] += ddt * ddt * system.Mass * (-system.Gravity);
+                } else {
+                    // 固定点：强制 delta_x = 0
+                    b.segment<3>(3 * i) = Eigen::Vector3f::Zero();
+                }
+            }
             for (auto const spring : system.Springs) {
                 auto const p0 = spring.AdjIdx.first;
                 auto const p1 = spring.AdjIdx.second;
                 glm::vec3 const x01 = system.Positions[p1] - system.Positions[p0];
                 // glm::vec3 const v01 = system.Velocities[p1] - system.Velocities[p0];
                 glm::vec3 const e01 = glm::normalize(x01);
+                float l = glm::length(x01);
+                if (glm::length(x01) < 1e-6f) continue;
                 for (int i = 0; i < 3; i ++)
                     for (int j = 0; j < 3; j ++){
-                        triplets.push_back(Eigen::Triplet<float>(3 * p0 + i, 3 * p0 + j, ddt * ddt * spring.Stiffness * e01[i] * e01[j]));
-                        triplets.push_back(Eigen::Triplet<float>(3 * p0 + i, 3 * p1 + j, -ddt * ddt * spring.Stiffness * e01[i] * e01[j]));
-                        triplets.push_back(Eigen::Triplet<float>(3 * p1 + i, 3 * p0 + j, -ddt * ddt * spring.Stiffness * e01[i] * e01[j]));
-                        triplets.push_back(Eigen::Triplet<float>(3 * p1 + i, 3 * p1 + j, ddt * ddt * spring.Stiffness * e01[i] * e01[j]));
+                        //修正
+                        float q =  ddt * ddt * system.Stiffness * (e01[i] * e01[j] * (spring.RestLength / l) + ((i == j) ? 0 : 1) * (1 - spring.RestLength / l) );
+                        // triplets.push_back(Eigen::Triplet<float>(3 * p0 + i, 3 * p0 + j, ddt * ddt * system.Stiffness * e01[i] * e01[j]));
+                        // triplets.push_back(Eigen::Triplet<float>(3 * p0 + i, 3 * p1 + j, -ddt * ddt * system.Stiffness * e01[i] * e01[j]));
+                        // triplets.push_back(Eigen::Triplet<float>(3 * p1 + i, 3 * p0 + j, -ddt * ddt * system.Stiffness * e01[i] * e01[j]));
+                        // triplets.push_back(Eigen::Triplet<float>(3 * p1 + i, 3 * p1 + j, ddt * ddt * system.Stiffness * e01[i] * e01[j]));
+                        triplets.push_back(Eigen::Triplet<float>(3 * p0 + i, 3 * p0 + j, q));
+                        triplets.push_back(Eigen::Triplet<float>(3 * p0 + i, 3 * p1 + j, -q));
+                        triplets.push_back(Eigen::Triplet<float>(3 * p1 + i, 3 * p0 + j, -q));
+                        triplets.push_back(Eigen::Triplet<float>(3 * p1 + i, 3 * p1 + j, q));
                     }
-                float f = ddt * ddt * spring.Stiffness * (glm::length(x01) - spring.RestLength);
+                float f = ddt * ddt * system.Stiffness * (l - spring.RestLength);
                 for (int i = 0; i < 3; i ++){
                     b[3 * p0 + i] += f * e01[i];
                     b[3 * p1 + i] -= f * e01[i];
                 }
             }
-        
+            Eigen::SparseMatrix<float> A(3 * n, 3 * n);
             A.setFromTriplets(triplets.begin(), triplets.end());
             Eigen::VectorXf delta_x = ComputeSimplicialLLT(A, b);
 
@@ -256,9 +278,9 @@ namespace VCX::Labs::Animation {
                     system.Positions[i].y += delta_x(3 * i + 1);
                     system.Positions[i].z += delta_x(3 * i + 2);
 
-                    system.Velocities[i].x += delta_x(3 * i) / ddt;
-                    system.Velocities[i].y += delta_x(3 * i + 1) / ddt;
-                    system.Velocities[i].z += delta_x(3 * i + 2) / ddt;
+                    system.Velocities[i].x = delta_x(3 * i) / ddt;
+                    system.Velocities[i].y = delta_x(3 * i + 1) / ddt;
+                    system.Velocities[i].z = delta_x(3 * i + 2) / ddt;
                 }
 
         }
