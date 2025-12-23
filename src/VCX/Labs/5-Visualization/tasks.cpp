@@ -12,7 +12,7 @@ namespace VCX::Labs::Visualization {
     bool PaintParallelCoordinates(Common::ImageRGB & input, InteractProxy const & proxy, std::vector<Car> const & data, bool force) {
         // your code here
         // for example: 
-        //   static CoordinateStates states(data);
+        static CoordinateStates states(data);
         //   SetBackGround(input, glm::vec4(1));
         //   ...
         return true;
