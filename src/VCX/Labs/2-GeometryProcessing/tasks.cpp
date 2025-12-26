@@ -231,14 +231,8 @@ namespace VCX::Labs::GeometryProcessing {
                 // your code here:
                 auto p1_ = glm::vec4(p1, 1.0f);
                 auto p2_ = glm::vec4(p2, 1.0f);
-                // glm::mat4 Q_prime = Q;
-                // Q_prime[3] = glm::vec4(0, 0, 0, 1); // 最后一行改为[0 0 0 1]
-                glm::mat4 Q_prime = glm::mat4{
-                    Q[0][0], Q[1][0],Q[2][0], 0,
-                    Q[0][1], Q[1][1],Q[2][1], 0,
-                    Q[0][2], Q[1][2],Q[2][2], 0,
-                    Q[0][3], Q[1][3],Q[2][3], 1
-                };
+                glm::mat4 Q_prime = Q;
+                Q_prime[3] = glm::vec4(0, 0, 0, 1); // 最后一行改为[0 0 0 1]
                 glm::vec4 rhs = glm::vec4(0, 0, 0, 1);
                 // 求解线性方程组 Q' * v = rhs
                 
@@ -374,11 +368,9 @@ namespace VCX::Labs::GeometryProcessing {
                 //     3. Update Q matrix of vertex v1 as well (update $Qv$).
                 //     4. Update $Kf$.
                 auto new_kp = UpdateQ(e->Face());
-                // for (int i = 0; i < 3; i ++)
-                //     if (e->Face()->VertexIndex(i) != v1)
-                //         Qv[e->Face()->VertexIndex(i)] += (new_kp - Kf[G.IndexOf(e->Face())]);
-                Qv[e->From()] += (new_kp - Kf[G.IndexOf(e->Face())]);
-                Qv[e->To()] += (new_kp - Kf[G.IndexOf(e->Face())]);
+                for (int i = 0; i < 3; i ++)
+                    if (e->Face()->VertexIndex(i) != v1)
+                        Qv[e->Face()->VertexIndex(i)] += (new_kp - Kf[G.IndexOf(e->Face())]);
                 Qv[v1] += new_kp;
                 Kf[G.IndexOf(e->Face())] = new_kp;
             }
@@ -391,24 +383,12 @@ namespace VCX::Labs::GeometryProcessing {
 
             for (auto e : ring) {
                 // 更新与v1相关的边
-                auto v = e -> From();
-                // for (int i = 0; i < pairs.size(); i++){
-                //     if (!pairs[i].edge) continue;
-                //     auto vf = pairs[i].edge->From(), vt = pairs[i].edge->To();
-                //     if (v == vf || v == vt) {
-                //         pairs[i] = MakePair(pairs[i].edge, output.Positions[vf], output.Positions[vt], Qv[vf] + Qv[vt]);
-                //     }
-                // }
-                for (auto e1 : G.Vertex(v)->Ring()){
-                    auto e2 = e1->NextEdge();
-                    if (!G.IsContractable(e2)){
-                        pairs[pair_map[G.IndexOf(e2)]].edge = nullptr;
-                    }
-                    else {
-                        auto v2 = e1->To();
-                        auto pair = MakePair(e2, output.Positions[v], output.Positions[v2], Qv[v] + Qv[v2]);
-                        pairs[pair_map[G.IndexOf(e2)]].targetPosition = pair.targetPosition;
-                        pairs[pair_map[G.IndexOf(e2)]].cost = pair.cost;
+                auto v = e -> To();
+                for (int i = 0; i < pairs.size(); i++){
+                    if (!pairs[i].edge) continue;
+                    auto vf = pairs[i].edge->From(), vt = pairs[i].edge->To();
+                    if (v == vf || v == vt) {
+                        pairs[i] = MakePair(pairs[i].edge, output.Positions[vf], output.Positions[vt], Qv[vf] + Qv[vt]);
                     }
                 }
             }
