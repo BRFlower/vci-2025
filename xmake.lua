@@ -70,7 +70,7 @@ target("lab-common")
     add_headerfiles("src/VCX/Labs/Common/*.h")
     add_files      ("src/VCX/Labs/Common/*.cpp")
 
-target("lab2")
+target("final")
     set_kind("binary")
     add_deps("lab-common")
     add_headerfiles("src/VCX/Labs/2-GeometryProcessing/*.h")

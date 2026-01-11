@@ -10,6 +10,7 @@
 #include "Labs/2-GeometryProcessing/CaseSimplification.h"
 #include "Labs/2-GeometryProcessing/CaseSmoothing.h"
 #include "Labs/2-GeometryProcessing/CaseSubdivision.h"
+#include "Labs/2-GeometryProcessing/CaseIntrinsicTriangulation.h"
 #include "Labs/Common/UI.h"
 
 namespace VCX::Labs::GeometryProcessing {
@@ -22,6 +23,7 @@ namespace VCX::Labs::GeometryProcessing {
         CaseSimplification   _caseSimplification;
         CaseSmoothing        _caseSmoothing;
         CaseMarchingCubes    _caseMarchingCubes;
+        CaseIntrinsicTriangulation _caseIntrinsicTriangulation;
 
         std::size_t _caseId = 0;
 
@@ -31,6 +33,7 @@ namespace VCX::Labs::GeometryProcessing {
             _caseSimplification,
             _caseSmoothing,
             _caseMarchingCubes,
+            _caseIntrinsicTriangulation,
         };
 
     public:
