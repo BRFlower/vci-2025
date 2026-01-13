@@ -12,8 +12,8 @@ namespace VCX::Labs::GeometryProcessing {
     void SmoothMesh(Engine::SurfaceMesh const & input, Engine::SurfaceMesh & output, std::uint32_t numIterations, float lambda, bool useUniformWeight);
     void MarchingCubes(Engine::SurfaceMesh & output, const std::function<float(const glm::vec3 &)> & sdf, const glm::vec3 & grid_min, const float dx, const int n);
     
-    IntrinsicData CalculateEdgeLength(DCEL const& G, Engine::SurfaceMesh const & extr_mesh)
-    void DistanceMap(Engine::SurfaceMesh const& input,
+    IntrinsicData CalculateEdgeLength(DCEL const& G, Engine::SurfaceMesh const & extr_mesh);
+    void DistanceMap(Engine::SurfaceMesh& input,
                     DCEL const& G,
                     IntrinsicData const& intrinsic,
                     std::vector<int> const& sources);

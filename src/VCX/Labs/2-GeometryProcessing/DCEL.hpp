@@ -22,6 +22,7 @@ namespace VCX::Labs::GeometryProcessing {
             HalfEdge const * NextEdge() const & { return this + _next; }
             HalfEdge const * PrevEdge() const & { return this + _prev; }
             HalfEdge const * TwinEdgeOr(HalfEdge const * defaultValue) const & { return _twin ? (this + _twin) : defaultValue; }
+            HalfEdge* GetTwinEdge(HalfEdge * defaultValue) & { return _twin ? (this + _twin) : defaultValue; }
             HalfEdge const * TwinEdge() const & { return this + _twin; }
 
             VertexIdx        OppositeVertex() const & { return this[_next]._to; }
@@ -474,6 +475,7 @@ namespace VCX::Labs::GeometryProcessing {
         // Function: FlipEdge
         // Function: FlipEdge
         // 翻转边 (v0, v1) -> (v2, v3)
+    public:
         template<typename T>
         bool FlipEdge(EdgeIdx edgeIndex, std::vector<T> &data, T newE) {
             // 1. 获取指针
@@ -504,10 +506,10 @@ namespace VCX::Labs::GeometryProcessing {
 
             // 3. 获取 4 个外部 Twin (如果存在)
             // 这些是我们需要通知更新的对象
-            HalfEdge* h1_outer = h1->TwinEdgeOr(nullptr); // v1->v2 的外部
-            HalfEdge* h2_outer = h2->TwinEdgeOr(nullptr); // v2->v0 的外部
-            HalfEdge* t1_outer = t1->TwinEdgeOr(nullptr); // v0->v3 的外部
-            HalfEdge* t2_outer = t2->TwinEdgeOr(nullptr); // v3->v1 的外部
+            HalfEdge* h1_outer = h1->GetTwinEdge(nullptr); // v1->v2 的外部
+            HalfEdge* h2_outer = h2->GetTwinEdge(nullptr); // v2->v0 的外部
+            HalfEdge* t1_outer = t1->GetTwinEdge(nullptr); // v0->v3 的外部
+            HalfEdge* t2_outer = t2->GetTwinEdge(nullptr); // v3->v1 的外部
 
             // ==================================================
             // 4. 重新分配槽位 (Rewiring)

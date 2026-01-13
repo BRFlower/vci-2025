@@ -132,7 +132,7 @@ CaseIntrinsicTriangulation::OnRender(
 
             // 如果需要翻转，我们创建一份副本进行操作
             // 注意：这里需要 DCEL 和 IntrinsicData 支持拷贝构造函数 (默认的通常就够用)
-            DCEL G_flipped = G_orig; 
+            DCEL G_flipped(inputMesh); 
             IntrinsicData data_flipped = data_orig;
 
             if (useFlipping) {

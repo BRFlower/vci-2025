@@ -693,10 +693,12 @@ namespace VCX::Labs::GeometryProcessing {
     //   (2) For each face, compute X = -∇u / |∇u|       (normalize gradient)
     //   (3) Solve L φ = div X with one vertex fixed     (Poisson)
     //   (4) φ is (approx.) geodesic distance
-    struct IntrinsicData{
-        std::vector<double> edge_length;
-        // std::vector<double> cot_weight;
-    };
+
+
+    // struct IntrinsicData{
+    //     std::vector<double> edge_length;
+    //     // std::vector<double> cot_weight;
+    // };
     
     //calculate distance mesh
     static inline double TriangleAreaFromEdges(double a, double b, double c){
@@ -781,7 +783,7 @@ namespace VCX::Labs::GeometryProcessing {
         return true;
     }
 
-    static inline bool FaceGradientIntrinsic(
+    /*static inline bool FaceGradientIntrinsic(
         const DCEL& G,
         DCEL::Triangle const* f,
         const std::vector<double>& u,            // size = NumVertices
@@ -829,7 +831,7 @@ namespace VCX::Labs::GeometryProcessing {
         if (area_out) *area_out = 0.5f * std::abs(twiceA);
         return true;
     }
-
+*/
 // Build cotan Laplacian L and lumped mass M under the intrinsic metric (edge lengths).
     // 对应 Python 中的 laplacian_matrix 和 mass_matrix
     /*static inline void BuildCotanLaplacianAndMass(const DCEL& G,
@@ -1204,7 +1206,7 @@ namespace VCX::Labs::GeometryProcessing {
         }
         return div;
     }    
-    void DistanceMap(Engine::SurfaceMesh const& input,
+    void DistanceMap(Engine::SurfaceMesh & input,
                     DCEL const& G,
                     IntrinsicData const& intrinsic,
                     std::vector<int> const& sources) {
@@ -1252,7 +1254,7 @@ namespace VCX::Labs::GeometryProcessing {
         }
 
 //观察u
-        output.TexCoords.resize(n);
+        input.TexCoords.resize(n);
         
         if (max_u == 0) max_u = 1.0; // 防止除以零
 
@@ -1268,7 +1270,7 @@ namespace VCX::Labs::GeometryProcessing {
         //     double wrapped_val = scaled - std::floor(scaled); 
 
         //     // 3. 写入 TexCoords
-        //     output.TexCoords[i] = glm::vec2(static_cast<float>(wrapped_val), 0.0f);
+        //     input.TexCoords[i] = glm::vec2(static_cast<float>(wrapped_val), 0.0f);
         // }
         // return;
 
@@ -1305,13 +1307,13 @@ namespace VCX::Labs::GeometryProcessing {
         Eigen::VectorXd r = Lreg * phi - divX;
         std::cout << "poisson residual norm=" << r.norm() << "\n";
 
-        output.TexCoords.resize(n);
+        input.TexCoords.resize(n);
         
         double max_phi = phi.maxCoeff();
         if (max_phi == 0) max_phi = 1.0; // 防止除以零
 
         // double frequency = 20.0; 
-        double frequency = 20;
+        double frequency = 5;
 
         for (int i = 0; i < n; ++i) {
             // 1. 先归一化到 [0, 1] (相对距离)
@@ -1323,7 +1325,7 @@ namespace VCX::Labs::GeometryProcessing {
             double wrapped_val = scaled - std::floor(scaled); 
 
             // 3. 写入 TexCoords
-            output.TexCoords[i] = glm::vec2(static_cast<float>(wrapped_val), 0.0f);
+            input.TexCoords[i] = glm::vec2(static_cast<float>(wrapped_val), 0.0f);
         }
         return;
         
@@ -1336,7 +1338,9 @@ namespace VCX::Labs::GeometryProcessing {
                     DCEL::HalfEdge const* e,
                     double & new_length
     ){
-        if (t = e->TwinEdgeOr(nullptr)){
+        if (auto t = e->TwinEdgeOr(nullptr)){
+            if (e->NextEdge()->To() == t->NextEdge()->To())
+                return false;
             // A+B > pi <=> cot A + cot B < 0
             double l0 = intrinsic_data.edge_length[G.IndexOf(e)];
             double l1 = intrinsic_data.edge_length[G.IndexOf(e->NextEdge())];
@@ -1349,13 +1353,14 @@ namespace VCX::Labs::GeometryProcessing {
             if (X >= -eps)
                 return false; 
 
-            glm::dvec p0, p1, p2, p3;
+            glm::dvec2 p0, p1, p2, p3;
             EmbedTriangle2D(l0,l1,l2, p0,p1,p2);
             EmbedTriangle2D(l0,l3,l4, p0,p1,p3);
             p3 = {p3[0], -p3[1]};
-            new_length = glm::distance2(p2,p3);
+            new_length = glm::distance(p2,p3);
             return true;
         }
+        return false;
     }
     void DoDelaunayFlipping(DCEL& G,IntrinsicData& intrinsic_data){
         bool changed = true;
@@ -1364,7 +1369,7 @@ namespace VCX::Labs::GeometryProcessing {
             changed = false;
             for (auto e : G.Edges()){//严格来说过程中会G会变动，但是e总是有意义，
                 if (DelaunayFlippable(G, intrinsic_data, e, new_length)){
-                    G.FlipEdge(IndexOf(e), intrinsic_data.edge_length, new_length);
+                    G.FlipEdge(G.IndexOf(e), intrinsic_data.edge_length, new_length);
                     changed = true;
                 }
             }
