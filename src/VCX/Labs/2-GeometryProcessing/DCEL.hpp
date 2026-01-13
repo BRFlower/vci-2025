@@ -469,5 +469,119 @@ namespace VCX::Labs::GeometryProcessing {
 
             return tri;
         }
+
+
+        // Function: FlipEdge
+        // Function: FlipEdge
+        // 翻转边 (v0, v1) -> (v2, v3)
+        template<typename T>
+        bool FlipEdge(EdgeIdx edgeIndex, std::vector<T> &data, T newE) {
+            // 1. 获取指针
+            HalfEdge* h_common = reinterpret_cast<HalfEdge*>(_faces.data()) + edgeIndex;
+            if (!h_common->TwinEdgeOr(nullptr)) return false; // 边界不能翻
+            HalfEdge* t_common = h_common + h_common->_twin;
+
+            // T0 的边: h0(公共), h1, h2
+            HalfEdge* h0 = h_common;
+            HalfEdge* h1 = h0 + h0->_next;
+            HalfEdge* h2 = h1 + h1->_next;
+
+            // T1 的边: t0(公共), t1, t2
+            HalfEdge* t0 = t_common;
+            HalfEdge* t1 = t0 + t0->_next;
+            HalfEdge* t2 = t1 + t1->_next;
+
+            // 2. 获取顶点 ID
+            VertexIdx v0 = h0->From();
+            VertexIdx v1 = h0->To();
+            VertexIdx v2 = h1->To();
+            VertexIdx v3 = t1->To();
+
+            T d01 = data[IndexOf(h1)];
+            T d02 = data[IndexOf(h2)];
+            T d11 = data[IndexOf(t1)];
+            T d12 = data[IndexOf(t2)];
+
+            // 3. 获取 4 个外部 Twin (如果存在)
+            // 这些是我们需要通知更新的对象
+            HalfEdge* h1_outer = h1->TwinEdgeOr(nullptr); // v1->v2 的外部
+            HalfEdge* h2_outer = h2->TwinEdgeOr(nullptr); // v2->v0 的外部
+            HalfEdge* t1_outer = t1->TwinEdgeOr(nullptr); // v0->v3 的外部
+            HalfEdge* t2_outer = t2->TwinEdgeOr(nullptr); // v3->v1 的外部
+
+            // ==================================================
+            // 4. 重新分配槽位 (Rewiring)
+            // ==================================================
+            // 目标结构:
+            // 新 T0: (v2, v3, v1) -> 边: (v2->v3), (v3->v1), (v1->v2)
+            // 新 T1: (v3, v2, v0) -> 边: (v3->v2), (v2->v0), (v0->v3)
+
+            // --- 配置新 T0 (使用原 h0, h1, h2 的内存) ---
+            
+            // Slot h0: 新公共边 v2->v3
+            h0->_to = v3;
+            h0->_twin = static_cast<int>(t0 - h0); // 连到 t0
+
+            // Slot h1: 承接原 t2 (v3->v1)
+            h1->_to = v1;
+            if (t2_outer) {
+                h1->_twin = static_cast<int>(t2_outer - h1);
+                t2_outer->_twin = static_cast<int>(h1 - t2_outer); // 更新外部
+            } else { h1->_twin = 0; }
+
+            // Slot h2: 承接原 h1 (v1->v2)
+            h2->_to = v2;
+            if (h1_outer) {
+                h2->_twin = static_cast<int>(h1_outer - h2);
+                h1_outer->_twin = static_cast<int>(h2 - h1_outer); // 更新外部
+            } else { h2->_twin = 0; }
+
+
+            // --- 新 T1: (v3, v2, v0) ---
+            // 边: (v3->v2), (v2->v0), (v0->v3)
+
+            // Slot t0: 新公共边 v3->v2
+            t0->_to = v2;
+            t0->_twin = static_cast<int>(h0 - t0); // 连到 h0
+
+            // Slot t1: 承接原 h2 (v2->v0)
+            t1->_to = v0;
+            if (h2_outer) {
+                t1->_twin = static_cast<int>(h2_outer - t1);
+                h2_outer->_twin = static_cast<int>(t1 - h2_outer); // 更新外部
+            } else { t1->_twin = 0; }
+
+            // Slot t2: 承接原 t1 (v0->v3)
+            t2->_to = v3;
+            if (t1_outer) {
+                t2->_twin = static_cast<int>(t1_outer - t2);
+                t1_outer->_twin = static_cast<int>(t2 - t1_outer); // 更新外部
+            } else { t2->_twin = 0; }
+            
+
+            // 5. 更新顶点指针
+            // v0 出发: t2 (v0->v3)
+            // v1 出发: h2 (v1->v2)
+            // v2 出发: h0 (v2->v3)
+            // v3 出发: t0 (v3->v2)
+            
+            _verts[v0] = IndexOf(t2);
+            _verts[v1] = IndexOf(h2);
+            _verts[v2] = IndexOf(h0);
+            _verts[v3] = IndexOf(t0);
+
+
+            // 更新data
+
+            data[IndexOf(h0)] = newE;
+            data[IndexOf(h1)] = d12;
+            data[IndexOf(h2)] = d01;
+            data[IndexOf(t0)] = newE;
+            data[IndexOf(t1)] = d02;
+            data[IndexOf(t2)] = d11;
+            return true;
+        }
     };
+
+
 }

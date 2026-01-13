@@ -1205,15 +1205,16 @@ namespace VCX::Labs::GeometryProcessing {
         return div;
     }    
     void DistanceMap(Engine::SurfaceMesh const& input,
-                    Engine::SurfaceMesh& output,
+                    DCEL const& G,
+                    IntrinsicData const& intrinsic,
                     std::vector<int> const& sources) {
-        output = input;
-        DCEL G(output);
+        // output = input;
+        // DCEL G(output);
         const int n = (int)G.NumOfVertices();
         if (n == 0 || sources.empty()) return;
 
         // 1) intrinsic metric from current extrinsic embedding
-        auto intrinsic = CalculateEdgeLength(G, output);
+        // auto intrinsic = CalculateEdgeLength(G, output);
 
         // 2) build L, M
         Eigen::SparseMatrix<double> L, M;
@@ -1328,6 +1329,46 @@ namespace VCX::Labs::GeometryProcessing {
         
         // 打印一下最终写入的范围，确认数值正常
         std::cout << "Output TexCoords range: [0, " << max_phi << "]" << std::endl;
+    }
+
+    bool DelaunayFlippable(const DCEL& G,
+                    const IntrinsicData& intrinsic_data,
+                    DCEL::HalfEdge const* e,
+                    double & new_length
+    ){
+        if (t = e->TwinEdgeOr(nullptr)){
+            // A+B > pi <=> cot A + cot B < 0
+            double l0 = intrinsic_data.edge_length[G.IndexOf(e)];
+            double l1 = intrinsic_data.edge_length[G.IndexOf(e->NextEdge())];
+            double l2 = intrinsic_data.edge_length[G.IndexOf(e->PrevEdge())];
+            double l3 = intrinsic_data.edge_length[G.IndexOf(t->NextEdge())];
+            double l4 = intrinsic_data.edge_length[G.IndexOf(t->PrevEdge())];
+            
+            double X = CalcCot(l1,l2,l0) + CalcCot(l3,l4,l0);
+            double eps = 1e-5;
+            if (X >= -eps)
+                return false; 
+
+            glm::dvec p0, p1, p2, p3;
+            EmbedTriangle2D(l0,l1,l2, p0,p1,p2);
+            EmbedTriangle2D(l0,l3,l4, p0,p1,p3);
+            p3 = {p3[0], -p3[1]};
+            new_length = glm::distance2(p2,p3);
+            return true;
+        }
+    }
+    void DoDelaunayFlipping(DCEL& G,IntrinsicData& intrinsic_data){
+        bool changed = true;
+        double new_length;
+        while (changed){
+            changed = false;
+            for (auto e : G.Edges()){//严格来说过程中会G会变动，但是e总是有意义，
+                if (DelaunayFlippable(G, intrinsic_data, e, new_length)){
+                    G.FlipEdge(IndexOf(e), intrinsic_data.edge_length, new_length);
+                    changed = true;
+                }
+            }
+        }
     }
 
 } // namespace VCX::Labs::GeometryProcessing

@@ -3,6 +3,7 @@
 
 #include "Labs/2-GeometryProcessing/tasks.h"
 #include "Labs/2-GeometryProcessing/CaseIntrinsicTriangulation.h"
+#include "Labs/2-GeometryProcessing/DCEL.hpp" 
 #include "Labs/Common/ImGuiHelper.h"
 
 namespace VCX::Labs::GeometryProcessing {
@@ -21,8 +22,7 @@ CaseIntrinsicTriangulation::CaseIntrinsicTriangulation(
     _cameraManager.AutoRotateSpeed = 0.f;
 
     // Geometry-friendly default rendering
-    _options.Ambient = 0.3f;     // 强环境光，避免阴影过重
-    // _options.Wireframe = true;        // Mesh Only 时会开启
+    _options.Ambient = 0.3f;     
     _options.Flat = true;
 
     _options.LightDirection =
@@ -67,6 +67,12 @@ void CaseIntrinsicTriangulation::OnSetupPropsUI() {
         _recompute = true;
     }
 
+    // Intrinsic Delaunay 开关
+    ImGui::Separator();
+    if (ImGui::Checkbox("Enable Intrinsic Delaunay", &_useFlipping)) {
+        _recompute = true;
+    }
+
     ImGui::Separator();
 
     if (ImGui::Button("Recompute"))
@@ -93,7 +99,6 @@ Common::CaseRenderResult
 CaseIntrinsicTriangulation::OnRender(
     std::pair<std::uint32_t, std::uint32_t> const desiredSize
 ) {
-    // Render options depend on mode
     if (_showInitialMesh) {
         _options.Wireframe = true;
     } else {
@@ -107,19 +112,55 @@ CaseIntrinsicTriangulation::OnRender(
         std::size_t modelIdx = _modelIdx;
         bool showMesh = _showInitialMesh;
         bool showUV   = _showUV;
+        bool useFlipping = _useFlipping;
 
-        _task.Emplace([&, modelIdx, showMesh, showUV]() {
+        _task.Emplace([&, modelIdx, showMesh, showUV, useFlipping]() {
             std::cout << "[TASK] Start\n";
 
-            Engine::SurfaceMesh output = GetModelMesh(modelIdx);
+            // 1. 获取原始网格
+            Engine::SurfaceMesh inputMesh = GetModelMesh(modelIdx);
+            Engine::SurfaceMesh output = inputMesh; 
 
-            if (showUV) {
-                // Use intrinsic distance -> TexCoords
-                std::vector<int> sources { 0 };
-                DistanceMap(GetModelMesh(modelIdx), output, sources);
+            // 2. 构建原始数据的 DCEL 和 IntrinsicData
+            DCEL G_orig(inputMesh);
+            IntrinsicData data_orig = CalculateEdgeLength(G_orig, inputMesh);
+
+            // 3. 准备用于计算的引用 (默认指向原始数据)
+            // 使用指针或引用来指向当前应该使用的数据集
+            DCEL* activeG = &G_orig;
+            IntrinsicData* activeData = &data_orig;
+
+            // 如果需要翻转，我们创建一份副本进行操作
+            // 注意：这里需要 DCEL 和 IntrinsicData 支持拷贝构造函数 (默认的通常就够用)
+            DCEL G_flipped = G_orig; 
+            IntrinsicData data_flipped = data_orig;
+
+            if (useFlipping) {
+                std::cout << "Computing Intrinsic Delaunay Triangulation...\n";
+                
+                // 对副本进行翻转操作
+                DoDelaunayFlipping(G_flipped, data_flipped);
+
+                // 更新输出网格的拓扑结构
+                output = G_flipped.ExportMesh();
+                output.Positions = inputMesh.Positions; 
+                output.TexCoords = inputMesh.TexCoords;
+
+                // 将活跃指针指向翻转后的数据
+                activeG = &G_flipped;
+                activeData = &data_flipped;
             }
 
-            std::cout << "Distance computation done.\n";
+            // 4. 计算距离场
+            if (showUV) {
+                std::cout << "Computing Distance Map...\n";
+                std::vector<int> sources { 0 };
+                
+                // 传入当前活跃的数据 (可能是原始的，也可能是翻转后的)
+                DistanceMap(output, *activeG, *activeData, sources);
+            }
+
+            std::cout << "Computation done.\n";
             return output;
         });
     }
@@ -143,7 +184,6 @@ CaseIntrinsicTriangulation::OnRender(
 // ============================================================
 
 void CaseIntrinsicTriangulation::OnProcessInput(ImVec2 const& pos) {
-    // 不拦截，保证滚轮缩放正常
     _cameraManager.ProcessInput(_camera, pos);
 }
 
