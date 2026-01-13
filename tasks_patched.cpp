@@ -177,13 +177,6 @@ namespace VCX::Labs::GeometryProcessing {
                     output.TexCoords[i] = (1-lambda) * output.TexCoords[i] + lambda * g;
                 }
         }
-        // print TexCoords range
-        float min_tex_x = 1.0f, max_tex_x = 0.0f;
-        for (auto & t : output.TexCoords) {
-            min_tex_x = std::min(min_tex_x, t.x);
-            max_tex_x = std::max(max_tex_x, t.x);
-        }
-        std::cout<< "TexCoords range : " << min_tex_x << " ~ " << max_tex_x << std::endl;
     }
 
     /******************* 3. Mesh Simplification *****************/
@@ -687,116 +680,100 @@ namespace VCX::Labs::GeometryProcessing {
 
 
 
+    
     // ========= final project: intrinsic distance on mesh (Heat Method, intrinsic metric) ========
     // Pipeline (Crane et al. 2013):
     //   (1) Solve (M - t L) u = M δ   (heat diffusion)
     //   (2) For each face, compute X = -∇u / |∇u|       (normalize gradient)
     //   (3) Solve L φ = div X with one vertex fixed     (Poisson)
     //   (4) φ is (approx.) geodesic distance
-    struct IntrinsicData{
-        std::vector<double> edge_length;
-        // std::vector<double> cot_weight;
+
+    struct IntrinsicData {
+        // length for each HALFEDGE (size = NumFaces * 3); index by G.IndexOf(halfedge)
+        std::vector<double> edgeLen;
     };
-    
-    //calculate distance mesh
-    static inline double TriangleAreaFromEdges(double a, double b, double c){
-        double s = (a + b + c) / 2;
-        double S = s * (s-a) * (s-b) * (s-c);
-        if (S <= 0) return 0.0;
-        return std::sqrt(S);
+
+    static inline double TriangleAreaFromEdges(double a, double b, double c) {
+        double s = 0.5 * (a + b + c);
+        double x = s * (s - a) * (s - b) * (s - c);
+        if (x <= 0.0) return 0.0;
+        return std::sqrt(x);
     }
-    static inline double CalcCot(double a, double b, double c){
-        double A = TriangleAreaFromEdges(a, b, c);
-        if (A <= 1e-16) return 0.0;
-        double cot = (a*a + b*b - c*c) / (4.0 * A);
-        if (!std::isfinite(cot)) return 0.0;
-        return cot;
+
+    static inline double CotOppositeEdge(double lij, double ljk, double lki) {
+        // cot(angle at vertex k), opposite edge (i,j)
+        // using: cot = (lki^2 + ljk^2 - lij^2) / (4A)
+        double A = TriangleAreaFromEdges(lij, ljk, lki);
+        if (A <= 1e-30) return 0.0;
+        return (lki * lki + ljk * ljk - lij * lij) / (4.0 * A);
     }
-    static inline double CotangentWeight(
-        const DCEL& G,
-        // const Engine::SurfaceMesh& mesh,
-        IntrinsicData const & intrinsic_data,
-        DCEL::HalfEdge const* e
-    ){
-        // DCEL::VertexIdx i = e->From();
-        // DCEL::VertexIdx j = e->To();
 
-        double l1 = intrinsic_data.edge_length[G.IndexOf(e)];
+    static inline IntrinsicData BuildIntrinsicData(const DCEL& G, const Engine::SurfaceMesh& extr) {
+        IntrinsicData data;
+        const size_t numHalfEdges = G.NumOfFaces() * 3;
+        data.edgeLen.assign(numHalfEdges, 0.0);
 
-        double l2 = intrinsic_data.edge_length[G.IndexOf(e->NextEdge())];
-        double l3 = intrinsic_data.edge_length[G.IndexOf(e->PrevEdge())];
-
-        double w = CalcCot(l1, l2, l3);
-
-        // ----- 右侧三角形（如果存在）-----
-        if (auto twin = e->TwinEdgeOr(nullptr)) {
-            l1 = intrinsic_data.edge_length[G.IndexOf(twin)];
-            l2 = intrinsic_data.edge_length[G.IndexOf(twin->NextEdge())];
-            l3 = intrinsic_data.edge_length[G.IndexOf(twin->PrevEdge())];
-            w += CalcCot(l1, l2, l3);
+        for (auto f : G.Faces()) {
+            for (int k = 0; k < 3; ++k) {
+                auto e = f->Edge((DCEL::Label)k);
+                auto i = (int)e->From();
+                auto j = (int)e->To();
+                double len = (double)glm::distance(extr.Positions[i], extr.Positions[j]);
+                data.edgeLen[G.IndexOf(e)] = len;
+            }
         }
-
-        return 0.5f * w;
-    }
-    
-    IntrinsicData CalculateEdgeLength(const DCEL & G, const Engine::SurfaceMesh & extr_mesh){
-        const int heCount = (int)(G.NumOfFaces() * 3); 
-        IntrinsicData intrinsic_mesh;
-        intrinsic_mesh.edge_length = std::vector<double>(heCount, 0.0f);
-        // intrinsic_mesh.cot_weight = std::vector<double>(lsize, 0.0f);
-        for (auto edge : G.Edges()) {
-            auto i = edge->From();
-            auto j = edge->To();
-            auto length = glm::distance(extr_mesh.Positions[i], extr_mesh.Positions[j]);
-            intrinsic_mesh.edge_length[G.IndexOf(edge)] = length;
-        }
-        // for (auto edge : G.Edges()){
-            // intrinsic_mesh.cot_weight[G.IndexOf(edge)] = CotangentWeight(G, extr_mesh, edge);
-        // }
-        return intrinsic_mesh;
+        return data;
     }
 
-    // Face Gradient
-    // perp(x,y) = (y, -x) 旋转
+    // perp(x,y) = (y, -x)
     static inline glm::dvec2 Perp(glm::dvec2 v) { return glm::dvec2(v.y, -v.x); }
 
-    // 给三边长：l01, l12, l20，构造 p0,p1,p2 的2D坐标（p0=(0,0), p1=(l01,0)）
-    static inline bool EmbedTriangle2D(
-        double l01, double l12, double l20,
-        glm::dvec2 &p0, glm::dvec2 &p1, glm::dvec2 &p2
-    ) {
-        p0 = {0.f, 0.f};
-        p1 = {l01, 0.f};
-
-        // 余弦定理：x2 = (l20^2 + l01^2 - l12^2) / (2 l01)
-        if (l01 <= 1e-12f) return false;
-        double x2 = (l20*l20 + l01*l01 - l12*l12) / (2.f * l01);
+    // Given edge lengths l01, l12, l20 embed triangle in 2D:
+    // p0=(0,0), p1=(l01,0), p2=(x2,y2) with y2>=0
+    static inline bool EmbedTriangle2D(double l01, double l12, double l20,
+                                       glm::dvec2& p0, glm::dvec2& p1, glm::dvec2& p2) {
+        if (l01 <= 1e-30) return false;
+        p0 = {0.0, 0.0};
+        p1 = {l01, 0.0};
+        double x2 = (l20*l20 + l01*l01 - l12*l12) / (2.0 * l01);
         double y2_sq = l20*l20 - x2*x2;
-        if (y2_sq < 0.f) y2_sq = 0.f; // 数值误差钳制
+        if (y2_sq < 0.0) y2_sq = 0.0;
         double y2 = std::sqrt(y2_sq);
-
         p2 = {x2, y2};
         return true;
     }
 
-    static inline bool FaceGradientIntrinsic(
-        const DCEL& G,
-        DCEL::Triangle const* f,
-        const std::vector<double>& u,            // size = NumVertices
-        const IntrinsicData &intrinsic_data,      // size = NumHalfEdges (EdgeIdx 范围)
-        glm::dvec2& grad_u_out,
-        double* area_out = nullptr               // 可选：输出面积
-    ) {
-        // 顶点
-        auto v0 = f->VertexIndex(0);
-        auto v1 = f->VertexIndex(1);
-        auto v2 = f->VertexIndex(2);
+    // Compute intrinsic per-face gradient of scalar u.
+    // Return grad in the embedded 2D chart.
+    static inline bool FaceGradientIntrinsic(const DCEL& G,
+                                            const DCEL::Triangle* f,
+                                            const std::vector<double>& u,
+                                            const IntrinsicData& data,
+                                            glm::dvec2& grad_out,
+                                            double* area_out = nullptr) {
+        auto v0 = (int)f->VertexIndex(0);
+        auto v1 = (int)f->VertexIndex(1);
+        auto v2 = (int)f->VertexIndex(2);
 
+        // DCEL::Triangle::Edge(i) gives the i-th halfedge inside triangle memory layout.
+        // For this DCEL implementation:
+        //   VertexIndex(i) returns _e[i].NextEdge()->_to
+        // The mapping of Edge(i) to vertex pairs is consistent inside the face.
+        // We'll retrieve three edge lengths by directly reading those 3 halfedges and
+        // matching them to (v0,v1,v2) order:
+        // We want l01=|v0-v1|, l12=|v1-v2|, l20=|v2-v0|.
+        auto e0 = f->Edge(0);
+        auto e1 = f->Edge(1);
+        auto e2 = f->Edge(2);
+
+        // These halfedges correspond to the triangle's directed edges:
+        //   e0: v? -> v? , e1: ..., e2: ...
+        // We can just find l01,l12,l20 by checking endpoints.
         auto getLen = [&](int a, int b) -> double {
             for (int k = 0; k < 3; ++k) {
                 auto e = f->Edge((DCEL::Label)k);
                 int x = (int)e->From(), y = (int)e->To();
-                if ((x == a && y == b) || (x == b && y == a)) return intrinsic_data.edge_length[G.IndexOf(e)];
+                if ((x == a && y == b) || (x == b && y == a)) return data.edgeLen[G.IndexOf(e)];
             }
             return 0.0;
         };
@@ -808,11 +785,11 @@ namespace VCX::Labs::GeometryProcessing {
         glm::dvec2 p0, p1, p2;
         if (!EmbedTriangle2D(l01, l12, l20, p0, p1, p2)) return false;
 
-        // 2A = cross(p1-p0, p2-p0) 的绝对值（在这个嵌入里 y2>=0，所以通常是正）
+        // 2A = cross(p1-p0, p2-p0)
         double twiceA = (p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x);
-        if (std::abs(twiceA) < 1e-12f) return false;
+        if (std::abs(twiceA) <= 1e-30) return false;
 
-        double inv2A = 1.f / twiceA;
+        double inv2A = 1.0 / twiceA;
 
         // ∇φ0 = perp(p1 - p2) / (2A)
         // ∇φ1 = perp(p2 - p0) / (2A)
@@ -821,16 +798,14 @@ namespace VCX::Labs::GeometryProcessing {
         glm::dvec2 g1 = Perp(p2 - p0) * inv2A;
         glm::dvec2 g2 = Perp(p0 - p1) * inv2A;
 
-        double u0 = u[v0], u1 = u[v1], u2 = u[v2];
-        grad_u_out = u0 * g0 + u1 * g1 + u2 * g2;
-
-        if (area_out) *area_out = 0.5f * std::abs(twiceA);
+        grad_out = u[v0] * g0 + u[v1] * g1 + u[v2] * g2;
+        if (area_out) *area_out = 0.5 * std::abs(twiceA);
         return true;
     }
 
-// Build cotan Laplacian L and lumped mass M under the intrinsic metric (edge lengths).
+    // Build cotan Laplacian L and lumped mass M under the intrinsic metric (edge lengths).
     static inline void BuildCotanLaplacianAndMass(const DCEL& G,
-                                                  const IntrinsicData& intrinsic_data,
+                                                  const IntrinsicData& data,
                                                   Eigen::SparseMatrix<double>& L,
                                                   Eigen::SparseMatrix<double>& M) {
         const int n = (int)G.NumOfVertices();
@@ -850,7 +825,7 @@ namespace VCX::Labs::GeometryProcessing {
                 for (int k = 0; k < 3; ++k) {
                     auto e = f->Edge((DCEL::Label)k);
                     int x = (int)e->From(), y = (int)e->To();
-                    if ((x == a && y == b) || (x == b && y == a)) return intrinsic_data.edge_length[G.IndexOf(e)];
+                    if ((x == a && y == b) || (x == b && y == a)) return data.edgeLen[G.IndexOf(e)];
                 }
                 return 0.0;
             };
@@ -871,7 +846,7 @@ namespace VCX::Labs::GeometryProcessing {
             int j = (int)e->To();
 
             // length of edge (i,j) in intrinsic metric (use this halfedge)
-            double lij = intrinsic_data.edge_length[G.IndexOf(e)];
+            double lij = data.edgeLen[G.IndexOf(e)];
             double w = 0.0;
 
             // left face (the face of e)
@@ -886,14 +861,14 @@ namespace VCX::Labs::GeometryProcessing {
                     for (int kk = 0; kk < 3; ++kk) {
                         auto ee = fL->Edge((DCEL::Label)kk);
                         int x = (int)ee->From(), y = (int)ee->To();
-                        if ((x == a && y == b) || (x == b && y == a)) return intrinsic_data.edge_length[G.IndexOf(ee)];
+                        if ((x == a && y == b) || (x == b && y == a)) return data.edgeLen[G.IndexOf(ee)];
                     }
                     return 0.0;
                 };
 
                 double ljk = getLenInFace(j, k);
                 double lki = getLenInFace(k, i);
-                w += CalcCot(lij, ljk, lki);
+                w += CotOppositeEdge(lij, ljk, lki);
             }
 
             // right face (across twin)
@@ -904,7 +879,7 @@ namespace VCX::Labs::GeometryProcessing {
                         for (int kk = 0; kk < 3; ++kk) {
                             auto ee = fR->Edge((DCEL::Label)kk);
                             int x = (int)ee->From(), y = (int)ee->To();
-                            if ((x == a && y == b) || (x == b && y == a)) return intrinsic_data.edge_length[G.IndexOf(ee)];
+                            if ((x == a && y == b) || (x == b && y == a)) return data.edgeLen[G.IndexOf(ee)];
                         }
                         return 0.0;
                     };
@@ -912,8 +887,8 @@ namespace VCX::Labs::GeometryProcessing {
                     double ljk = getLenInFace(j, k);
                     double lki = getLenInFace(k, i);
                     // note: lij is same edge length, but safe to read from t too:
-                    double lijR = intrinsic_data.edge_length[G.IndexOf(t)];
-                    w += CalcCot(lijR, ljk, lki);
+                    double lijR = data.edgeLen[G.IndexOf(t)];
+                    w += CotOppositeEdge(lijR, ljk, lki);
                 }
             }
 
@@ -956,72 +931,71 @@ namespace VCX::Labs::GeometryProcessing {
         return cg.solve(b);
     }
 
-    static inline Eigen::VectorXd ComputeDivergenceOfNormalizedGrad(
-        const DCEL& G,
-        const IntrinsicData& intrinsic_data,
-        const std::vector<double>& u)
-    {
+    // Given u, compute normalized vector field X per face (2D), then compute divergence at vertices.
+    static inline Eigen::VectorXd ComputeDivergenceOfNormalizedGrad(const DCEL& G,
+                                                                   const IntrinsicData& data,
+                                                                   const std::vector<double>& u) {
         const int n = (int)G.NumOfVertices();
         Eigen::VectorXd div = Eigen::VectorXd::Zero(n);
 
-        auto dot2 = [](const glm::dvec2& a, const glm::dvec2& b) {
-            return a.x * b.x + a.y * b.y;
-        };
-
         for (auto f : G.Faces()) {
-            int v[3] = {
-                (int)f->VertexIndex(0),
-                (int)f->VertexIndex(1),
-                (int)f->VertexIndex(2)
-            };
+            int v0 = (int)f->VertexIndex(0);
+            int v1 = (int)f->VertexIndex(1);
+            int v2 = (int)f->VertexIndex(2);
 
-            // edge lengths
             auto getLen = [&](int a, int b) -> double {
                 for (int k = 0; k < 3; ++k) {
                     auto e = f->Edge((DCEL::Label)k);
                     int x = (int)e->From(), y = (int)e->To();
-                    if ((x == a && y == b) || (x == b && y == a))
-                        return intrinsic_data.edge_length[G.IndexOf(e)];
+                    if ((x == a && y == b) || (x == b && y == a)) return data.edgeLen[G.IndexOf(e)];
                 }
                 return 0.0;
             };
 
-            double l01 = getLen(v[0], v[1]);
-            double l12 = getLen(v[1], v[2]);
-            double l20 = getLen(v[2], v[0]);
+            double l01 = getLen(v0, v1);
+            double l12 = getLen(v1, v2);
+            double l20 = getLen(v2, v0);
 
-            glm::dvec2 p[3];
-            if (!EmbedTriangle2D(l01, l12, l20, p[0], p[1], p[2])) continue;
+            glm::dvec2 p0, p1, p2;
+            if (!EmbedTriangle2D(l01, l12, l20, p0, p1, p2)) continue;
 
             glm::dvec2 grad_u;
-            if (!FaceGradientIntrinsic(G, f, u, intrinsic_data, grad_u)) continue;
+            double A = 0.0;
+            if (!FaceGradientIntrinsic(G, f, u, data, grad_u, &A)) continue;
+            double norm = std::sqrt(grad_u.x * grad_u.x + grad_u.y * grad_u.y);
+            if (norm <= 1e-30) continue;
 
-            double norm = glm::length(grad_u);
-            glm::dvec2 X = {0, 0};
-            if (norm > 1e-12)
-                X = -grad_u / norm;
+            glm::dvec2 X = -grad_u / norm;
 
-            // --- edge-based flux ---
-            for (int s = 0; s < 3; ++s) {
-                int i = v[s];
-                int j = v[(s + 1) % 3];
-                int k = v[(s + 2) % 3]; // opposite vertex
+            // cotangents via embedded 2D coordinates (more stable / no Heron)
+            glm::dvec2 e01 = p1 - p0;
+            glm::dvec2 e02 = p2 - p0;
+            glm::dvec2 e12 = p2 - p1;
 
-                // edge vector in this face
-                glm::dvec2 eij = p[(s + 1) % 3] - p[s];
+            double cross012 = e01.x * e02.y - e01.y * e02.x;
+            if (std::abs(cross012) <= 1e-30) continue;
 
-                // cot(angle at opposite vertex k)
-                double lij = getLen(i, j);
-                double lik = getLen(i, k);
-                double ljk = getLen(j, k);
-                double cot_k = CalcCot(lik, ljk, lij);
+            auto cot_from = [](const glm::dvec2& a, const glm::dvec2& b) -> double {
+                double cross = a.x * b.y - a.y * b.x;
+                if (std::abs(cross) <= 1e-30) return 0.0;
+                return (a.x * b.x + a.y * b.y) / cross;
+            };
 
-                double flux = 0.5 * cot_k * dot2(eij, X);
+            double cot0 = cot_from(e01, e02);          // at v0
+            double cot1 = cot_from(-e01, e12);         // at v1: vectors (p0-p1) and (p2-p1)
+            double cot2 = cot_from(-e02, -e12);        // at v2: vectors (p0-p2) and (p1-p2)
 
-                div[i] += flux;
-                div[j] -= flux;
-            }
+            // Divergence contributions (Crane heat method):
+            // For vertex v0:
+            //   0.5 * [ cot(angle at v2) * X·(p1-p0) + cot(angle at v1) * X·(p2-p0) ]
+            // and cyclic permutations.
+            auto dot2 = [](const glm::dvec2& a, const glm::dvec2& b) -> double { return a.x*b.x + a.y*b.y; };
+
+            div[v0] += 0.5 * (cot2 * dot2(X, (p1 - p0)) + cot1 * dot2(X, (p2 - p0)));
+            div[v1] += 0.5 * (cot0 * dot2(X, (p2 - p1)) + cot2 * dot2(X, (p0 - p1)));
+            div[v2] += 0.5 * (cot1 * dot2(X, (p0 - p2)) + cot0 * dot2(X, (p1 - p2)));
         }
+
         return div;
     }
 
@@ -1034,7 +1008,7 @@ namespace VCX::Labs::GeometryProcessing {
         if (n == 0 || sources.empty()) return;
 
         // 1) intrinsic metric from current extrinsic embedding
-        auto intrinsic = CalculateEdgeLength(G, output);
+        auto intrinsic = BuildIntrinsicData(G, output);
 
         // 2) build L, M
         Eigen::SparseMatrix<double> L, M;
@@ -1044,59 +1018,76 @@ namespace VCX::Labs::GeometryProcessing {
         double meanL = 0.0;
         size_t cnt = 0;
         for (auto e : G.Edges()) {
-            meanL += intrinsic.edge_length[G.IndexOf(e)];
+            meanL += intrinsic.edgeLen[G.IndexOf(e)];
             ++cnt;
         }
         meanL = (cnt > 0) ? (meanL / (double)cnt) : 1.0;
         double t = 0.1 * meanL * meanL;
-        //alpha = 0.1   1
-        // 4) Solve (M + tL) u = M δ
-        Eigen::SparseMatrix<double> A = M + t * L;
+
+        // 4) Solve (M - tL) u = M δ
+        Eigen::SparseMatrix<double> A = M - t * L;
 
         Eigen::VectorXd b = Eigen::VectorXd::Zero(n);
         // Since M is diagonal (lumped), M*δ is just mass at source vertices.
         for (int s : sources) {
-            if (s >= 0 && s < n) b[s] = 1.0/*M.coeff(s, s)*/;
+            if (s >= 0 && s < n) b[s] = M.coeff(s, s);
         }
-
 
         Eigen::VectorXd u_e = SolveSPD(A, b);
 
         std::vector<double> u((size_t)n, 0.0);
         for (int i = 0; i < n; ++i) u[(size_t)i] = u_e[i];
 
-        std::cout << "u range: [" << u_e.minCoeff()
-          << ", " << u_e.maxCoeff() << "]\n";
-
-        auto has_bad = [](const Eigen::VectorXd& x){
-            for (int i=0;i<x.size();++i) if (!std::isfinite(x[i])) return true;
-                return false;
-        };
-        std::cout << "u has bad? " << has_bad(u_e) << " min=" << u_e.minCoeff() << " max=" << u_e.maxCoeff() << "\n";
-
-        
         // 5) Compute div X from normalized gradients
         Eigen::VectorXd divX = ComputeDivergenceOfNormalizedGrad(G, intrinsic, u);
 
-        // 6) Solve Poisson: (L + eps I) φ = divX
-        Eigen::SparseMatrix<double> I(n, n);
-        I.setIdentity();
-        Eigen::SparseMatrix<double> Lreg = L + 1e-8 * I;
-
-        Eigen::VectorXd phi = SolveSPD(Lreg, divX);
-
-        // Gauge fix
+        // 6) Solve Poisson: L φ = div X, fix one vertex to remove nullspace.
         int anchor = sources[0];
         if (anchor < 0 || anchor >= n) anchor = 0;
-        phi.array() -= phi[anchor];
 
-        // optional: shift to non-negative for visualization
+        // Build L_fixed by removing row/col at anchor and setting diag(anchor)=1
+        std::vector<Eigen::Triplet<double>> T;
+        T.reserve((size_t)L.nonZeros() + 1);
+
+        for (int k = 0; k < L.outerSize(); ++k) {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(L, k); it; ++it) {
+                int r = it.row();
+                int c = it.col();
+                if (r == anchor || c == anchor) continue;
+                T.emplace_back(r, c, it.value());
+            }
+        }
+        T.emplace_back(anchor, anchor, 1.0);
+
+        Eigen::SparseMatrix<double> Lfix(n, n);
+        Lfix.setFromTriplets(T.begin(), T.end());
+        Lfix.makeCompressed();
+
+        Eigen::VectorXd rhs = divX;
+        rhs[anchor] = 0.0;
+
+        Eigen::VectorXd phi = SolveSPD(Lfix, rhs);
+
+        // Shift so that distance at anchor is 0 and make non-negative
+        double shift = phi[anchor];
+        for (int i = 0; i < n; ++i) phi[i] -= shift;
+
         double minv = phi.minCoeff();
-        phi.array() -= minv;
+        for (int i = 0; i < n; ++i) phi[i] -= minv;
 
-        // diagnostics (correct residual)
-        Eigen::VectorXd r = Lreg * phi - divX;
-        std::cout << "poisson residual norm=" << r.norm() << "\n";
+        // Store result in output.TexCoords as a simple visualization (1D -> 2D):
+        // (If your renderer expects vertex colors/texcoords elsewhere, adjust accordingly.)
+        if (output.TexCoords.size() != output.Positions.size())
+            output.TexCoords.resize(output.Positions.size(), glm::vec2(0.0f));
+
+        double maxv = phi.maxCoeff();
+        if (maxv <= 1e-30) maxv = 1.0;
+
+        for (int i = 0; i < n; ++i) {
+            float v = (float)(phi[i] / maxv); // normalize to [0,1]
+            output.TexCoords[(size_t)i] = glm::vec2(v, v);
+        }
     }
+
 
 } // namespace VCX::Labs::GeometryProcessing

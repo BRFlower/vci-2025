@@ -9,5 +9,7 @@ namespace VCX::Labs::GeometryProcessing {
     void SimplifyMesh(Engine::SurfaceMesh const & input, Engine::SurfaceMesh & output, float simplification_ratio);
     void SmoothMesh(Engine::SurfaceMesh const & input, Engine::SurfaceMesh & output, std::uint32_t numIterations, float lambda, bool useUniformWeight);
     void MarchingCubes(Engine::SurfaceMesh & output, const std::function<float(const glm::vec3 &)> & sdf, const glm::vec3 & grid_min, const float dx, const int n);
-
+    void DistanceMap(Engine::SurfaceMesh const& input,
+                     Engine::SurfaceMesh& output,
+                     std::vector<int> const& sources);
 }

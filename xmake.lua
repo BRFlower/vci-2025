@@ -17,6 +17,7 @@ add_requires("tinyobjloader")
 add_requires("yaml-cpp")
 add_requires("eigen")
 
+
 if is_plat("macosx") then
     add_defines("PLATFORM_MACOSX")
 end
@@ -51,6 +52,7 @@ target("engine")
     add_packages("fmt"          , { public = true })
     add_packages("tinyobjloader", { public = true })
     add_packages("yaml-cpp"     , { public = true })
+    add_packages("eigen"        , { public = true })
 
     add_includedirs("src/3rdparty", { public = true })
     add_includedirs("src/VCX"     , { public = true })

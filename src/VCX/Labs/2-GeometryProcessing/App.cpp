@@ -10,7 +10,10 @@ namespace VCX::Labs::GeometryProcessing {
         _caseSimplification(_viewer, { ExampleModel::Sphere, ExampleModel::Block, ExampleModel::Dinosaur, ExampleModel::Fandisk, ExampleModel::Rocker, ExampleModel::Arma }),
         _caseSmoothing(_viewer, { ExampleModel::Sphere, ExampleModel::Block, ExampleModel::Dinosaur, ExampleModel::Fandisk, ExampleModel::Rocker }),
         _caseMarchingCubes(_viewer),
-        _caseIntrinsicTriangulation(_viewer, { ExampleModel::Sphere, ExampleModel::Block, ExampleModel::Dinosaur, ExampleModel::Fandisk, ExampleModel::Rocker, ExampleModel::Arma }),
+        _caseIntrinsicTriangulation(
+            _viewer,
+            IntrinsicContent::Models
+        ),
         _ui(Labs::Common::UIOptions { }) {
     }
 
