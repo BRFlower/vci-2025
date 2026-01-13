@@ -15,7 +15,7 @@ namespace VCX::Labs::GeometryProcessing {
 
 #include "Labs/2-GeometryProcessing/marching_cubes_table.h"
 
-    /******************* 1. Mesh Subdivision *****************/
+    /**** 1. Mesh Subdivision ****/
     void SubdivisionMesh(Engine::SurfaceMesh const & input, Engine::SurfaceMesh & output, std::uint32_t numIterations) {
         Engine::SurfaceMesh curr_mesh = input;
         // We do subdivison iteratively.
@@ -65,7 +65,7 @@ namespace VCX::Labs::GeometryProcessing {
             for (auto e : G.Edges()) {
                 // newIndices[face index][vertex index] = index of the newly generated vertex
                 newIndices[G.IndexOf(e->Face())][e->EdgeLabel()] = curr_mesh.Positions.size();
-                auto eTwin                                       = e->TwinEdgeOr(nullptr);
+                auto eTwin                    = e->TwinEdgeOr(nullptr);
                 // eTwin stores the twin halfedge.
                 if (! eTwin) {
                     // When there is no twin halfedge (so, e is a boundary edge):
@@ -126,7 +126,7 @@ namespace VCX::Labs::GeometryProcessing {
         output.Swap(curr_mesh);
     }
 
-    /******************* 2. Mesh Parameterization *****************/
+    /**** 2. Mesh Parameterization ****/
     void Parameterization(Engine::SurfaceMesh const & input, Engine::SurfaceMesh & output, const std::uint32_t numIterations) {
         // Copy.
         output = input;
@@ -171,7 +171,7 @@ namespace VCX::Labs::GeometryProcessing {
                 if (boundary_vertices.find(i) == boundary_vertices.end()){
                     glm::vec2 g = glm::vec2(0);
                     for (auto neighbor : G.Vertex(i) -> Neighbors()){
-                        g +=  output.TexCoords[neighbor];
+                    g +=  output.TexCoords[neighbor];
                     }
                     g /= G.Vertex(i) -> Neighbors().size();
                     output.TexCoords[i] = (1-lambda) * output.TexCoords[i] + lambda * g;
@@ -186,7 +186,7 @@ namespace VCX::Labs::GeometryProcessing {
         std::cout<< "TexCoords range : " << min_tex_x << " ~ " << max_tex_x << std::endl;
     }
 
-    /******************* 3. Mesh Simplification *****************/
+    /**** 3. Mesh Simplification ****/
     void SimplifyMesh(Engine::SurfaceMesh const & input, Engine::SurfaceMesh & output, float simplification_ratio) {
 
         DCEL G(input);
@@ -258,11 +258,11 @@ namespace VCX::Labs::GeometryProcessing {
                     // compare p1_, p2_, vprime
                     auto d_p1 = glm::dot(p1_, Q * p1_), d_p2 = glm::dot(p2_, Q * p2_), d_mid = glm::dot(vprime, Q * vprime);
                     if (d_p1 < d_p2 && d_p1 < d_mid) {
-                        vprime = p1_;
+                    vprime = p1_;
                     } else if (d_p2 < d_p1 && d_p2 < d_mid) {
-                        vprime = p2_;
+                    vprime = p2_;
                     }
-                                    //lambda p1 + (1-lambda) p2;
+                    //lambda p1 + (1-lambda) p2;
                     // sum dis^2 = a l^2 + 2 * b l + c
                     // auto a = glm::dot(p1_ - p2_, Q * (p1_ - p2_));
                     // auto b = glm::dot(p1_, Q * (p1_ - p2_)); // Q^T = Q always
@@ -294,8 +294,8 @@ namespace VCX::Labs::GeometryProcessing {
         // Kf:       $Kf[idx]$ is the Kp matrix of face with index $idx$
         std::unordered_map<DCEL::EdgeIdx, std::size_t> pair_map; 
         std::vector<ContractionPair>                  pairs; 
-        std::vector<glm::mat4>                         Qv(G.NumOfVertices(), glm::mat4(0));
-        std::vector<glm::mat4>                         Kf(G.NumOfFaces(),    glm::mat4(0));
+        std::vector<glm::mat4>                    Qv(G.NumOfVertices(), glm::mat4(0));
+        std::vector<glm::mat4>                    Kf(G.NumOfFaces(),    glm::mat4(0));
 
         // Initially, we compute Q matrix for each faces and it accumulates at each vertex.
         for (auto f : G.Faces()) {
@@ -312,9 +312,9 @@ namespace VCX::Labs::GeometryProcessing {
         // Initially, we make pairs from all the contractable edges.
         for (auto e : G.Edges()) {
             if (! G.IsContractable(e)) continue;
-            auto v1                            = e->From();
-            auto v2                            = e->To();
-            auto pair                          = MakePair(e, input.Positions[v1], input.Positions[v2], Qv[v1] + Qv[v2]);
+            auto v1                    = e->From();
+            auto v2                    = e->To();
+            auto pair                    = MakePair(e, input.Positions[v1], input.Positions[v2], Qv[v1] + Qv[v2]);
             pair_map[G.IndexOf(e)]             = pairs.size();
             pair_map[G.IndexOf(e->TwinEdge())] = pairs.size();
             pairs.emplace_back(pair);
@@ -382,7 +382,7 @@ namespace VCX::Labs::GeometryProcessing {
                 auto new_kp = UpdateQ(e->Face());
                 for (int i = 0; i < 3; i ++)
                     if (e->Face()->VertexIndex(i) != v1)
-                        Qv[e->Face()->VertexIndex(i)] += (new_kp - Kf[G.IndexOf(e->Face())]);
+                    Qv[e->Face()->VertexIndex(i)] += (new_kp - Kf[G.IndexOf(e->Face())]);
                 Qv[v1] += new_kp;
                 Kf[G.IndexOf(e->Face())] = new_kp;
             }
@@ -400,7 +400,7 @@ namespace VCX::Labs::GeometryProcessing {
                     if (!pairs[i].edge) continue;
                     auto vf = pairs[i].edge->From(), vt = pairs[i].edge->To();
                     if (v == vf || v == vt) {
-                        pairs[i] = MakePair(pairs[i].edge, output.Positions[vf], output.Positions[vt], Qv[vf] + Qv[vt]);
+                    pairs[i] = MakePair(pairs[i].edge, output.Positions[vf], output.Positions[vt], Qv[vf] + Qv[vt]);
                     }
                 }
             }
@@ -415,7 +415,7 @@ namespace VCX::Labs::GeometryProcessing {
         output.Indices.swap(exported.Indices);
     }
 
-    /******************* 4. Mesh Smoothing *****************/
+    /**** 4. Mesh Smoothing ****/
     void SmoothMesh(Engine::SurfaceMesh const & input, Engine::SurfaceMesh & output, std::uint32_t numIterations, float lambda, bool useUniformWeight) {
         // Define function to compute cotangent value of the angle v1-vAngle-v2
         static constexpr auto GetCotangent {
@@ -488,23 +488,23 @@ namespace VCX::Labs::GeometryProcessing {
                     auto angle_point = get_else(i,v,f);
                     float cot;
                     if (useUniformWeight){
-                        cot = 1;
-                        // sum_w += 1;
+                    cot = 1;
+                    // sum_w += 1;
                     }
                     else{
-                        auto x1 = prev_mesh.Positions[angle_point]-prev_mesh.Positions[i], x2 = prev_mesh.Positions[angle_point] - prev_mesh.Positions[v];
-                        // sum_w += glm::sqrt(glm::dot(glm::cross(x1,x2),glm::cross(x1,x2))) / 3;
-                        cot = -GetCotangent(prev_mesh.Positions[angle_point],prev_mesh.Positions[v],prev_mesh.Positions[i]);
-                        // auto twin = m->TwinEdgeOr(nullptr);
-                        f = m->OppositeFace();
-                        if (f != nullptr) {
-                            angle_point = get_else(i,v,f);
-                            cot += -GetCotangent(prev_mesh.Positions[angle_point],prev_mesh.Positions[v],prev_mesh.Positions[i]);
-                            // cot /= 2;
-                        }
-                        if (cot < 0)
-                            cot = -cot;
-                        // sum_w += cot;
+                    auto x1 = prev_mesh.Positions[angle_point]-prev_mesh.Positions[i], x2 = prev_mesh.Positions[angle_point] - prev_mesh.Positions[v];
+                    // sum_w += glm::sqrt(glm::dot(glm::cross(x1,x2),glm::cross(x1,x2))) / 3;
+                    cot = -GetCotangent(prev_mesh.Positions[angle_point],prev_mesh.Positions[v],prev_mesh.Positions[i]);
+                    // auto twin = m->TwinEdgeOr(nullptr);
+                    f = m->OppositeFace();
+                    if (f != nullptr) {
+                    angle_point = get_else(i,v,f);
+                    cot += -GetCotangent(prev_mesh.Positions[angle_point],prev_mesh.Positions[v],prev_mesh.Positions[i]);
+                    // cot /= 2;
+                    }
+                    if (cot < 0)
+                    cot = -cot;
+                    // sum_w += cot;
                     }
                     sum_w += cot;
                     surround += cot * (prev_mesh.Positions[v]);
@@ -525,7 +525,7 @@ namespace VCX::Labs::GeometryProcessing {
         output.Indices = input.Indices;
     }
 
-    /******************* 5. Marching Cubes *****************/
+    /**** 5. Marching Cubes ****/
     void MarchingCubes(Engine::SurfaceMesh & output, const std::function<float(const glm::vec3 &)> & sdf, const glm::vec3 & grid_min, const float dx, const int n) {
         // your code here:
         output.Positions.clear();
@@ -639,10 +639,10 @@ namespace VCX::Labs::GeometryProcessing {
                 
                 auto unit = [](int i) -> glm::vec3 {
                     switch(i) {
-                        case 0: return glm::vec3(1, 0, 0);
-                        case 1: return glm::vec3(0, 1, 0);
-                        case 2: return glm::vec3(0, 0, 1);
-                        default: return glm::vec3(0, 0, 0);
+                    case 0: return glm::vec3(1, 0, 0);
+                    case 1: return glm::vec3(0, 1, 0);
+                    case 2: return glm::vec3(0, 0, 1);
+                    default: return glm::vec3(0, 0, 0);
                     }
                 };
                 
@@ -675,7 +675,7 @@ namespace VCX::Labs::GeometryProcessing {
                     glm::vec3 start = grid_min + glm::vec3(i * dx, j * dx, k * dx);
                     uint32_t outside = 0;
                     for (int u = 0; u < 8; u ++)
-                        outside |= (sdf(start + dx * glm::vec3(u&1, (u>>1)&1, (u>>2)&1)) < 0) << u;
+                    outside |= (sdf(start + dx * glm::vec3(u&1, (u>>1)&1, (u>>2)&1)) < 0) << u;
                     if (outside == 0 || outside == 255) continue;
                     do_marching(start, outside);
                 }
@@ -687,7 +687,7 @@ namespace VCX::Labs::GeometryProcessing {
 
 
 
-    // ========= final project: intrinsic distance on mesh (Heat Method, intrinsic metric) ========
+    // ==== final project: intrinsic distance on mesh (Heat Method, intrinsic metric) ====
     // Pipeline (Crane et al. 2013):
     //   (1) Solve (M - t L) u = M δ   (heat diffusion)
     //   (2) For each face, compute X = -∇u / |∇u|       (normalize gradient)
@@ -728,7 +728,7 @@ namespace VCX::Labs::GeometryProcessing {
 
         double w = CalcCot(l1, l2, l3);
 
-        // ----- 右侧三角形（如果存在）-----
+        // ---- 右侧三角形（如果存在）----
         if (auto twin = e->TwinEdgeOr(nullptr)) {
             l1 = intrinsic_data.edge_length[G.IndexOf(twin)];
             l2 = intrinsic_data.edge_length[G.IndexOf(twin->NextEdge())];
@@ -749,6 +749,8 @@ namespace VCX::Labs::GeometryProcessing {
             auto j = edge->To();
             auto length = glm::distance(extr_mesh.Positions[i], extr_mesh.Positions[j]);
             intrinsic_mesh.edge_length[G.IndexOf(edge)] = length;
+            if (auto opp = edge->TwinEdgeOr(nullptr))
+                intrinsic_mesh.edge_length[G.IndexOf(opp)] = length;
         }
         // for (auto edge : G.Edges()){
             // intrinsic_mesh.cot_weight[G.IndexOf(edge)] = CotangentWeight(G, extr_mesh, edge);
@@ -829,10 +831,118 @@ namespace VCX::Labs::GeometryProcessing {
     }
 
 // Build cotan Laplacian L and lumped mass M under the intrinsic metric (edge lengths).
+    // 对应 Python 中的 laplacian_matrix 和 mass_matrix
+    /*static inline void BuildCotanLaplacianAndMass(const DCEL& G,
+                    const IntrinsicData& intrinsic_data,
+                    Eigen::SparseMatrix<double>& L,
+                    Eigen::SparseMatrix<double>& M) {
+        const int n = (int)G.NumOfVertices();
+        std::vector<Eigen::Triplet<double>> Lt;
+        std::vector<Eigen::Triplet<double>> Mt;
+
+        // 1. 构建 Mass Matrix (Lumped Mass)
+        // Python: mass += area / 3
+        std::vector<double> mass_diag(n, 0.0);
+        
+        for (auto f : G.Faces()) {
+            int v0 = f->VertexIndex(0);
+            int v1 = f->VertexIndex(1);
+            int v2 = f->VertexIndex(2);
+
+            // 获取边长
+            auto getLen = [&](int a, int b) {
+                for (int k = 0; k < 3; ++k) {
+                    auto e = f->Edge((DCEL::Label)k);
+                    int x = e->From(), y = e->To();
+                    if ((x == a && y == b) || (x == b && y == a)) 
+                        return intrinsic_data.edge_length[G.IndexOf(e)];
+                }
+                return 0.0;
+            };
+            double l01 = getLen(v0, v1);
+            double l12 = getLen(v1, v2);
+            double l20 = getLen(v2, v0);
+            double area = TriangleAreaFromEdges(l01, l12, l20);
+
+            mass_diag[v0] += area / 3.0;
+            mass_diag[v1] += area / 3.0;
+            mass_diag[v2] += area / 3.0;
+        }
+
+        for(int i=0; i<n; ++i) {
+            Mt.emplace_back(i, i, mass_diag[i]);
+        }
+
+        // 2. 构建 Laplacian Matrix (Cotan Weights)
+        // Python: L[i, j] = 0.5 * (cot_alpha + cot_beta)
+        // Python: L[i, i] = -sum(L[i, j])  <-- 负半定
+        std::vector<double> diag_L(n, 0.0);
+
+        for (auto e : G.Edges()) {
+            // 只处理每条边一次 (例如 index(e) < index(twin)) 或者利用半边结构
+            // 这里为了简单，我们遍历所有半边，然后系数除以2，或者只处理主边
+            // 你的 DCEL 遍历 G.Edges() 会遍历所有半边。
+            // 我们只处理 "主" 半边 (例如没有 Twin 或者 Index < TwinIndex)
+            if (e->TwinEdgeOr(nullptr) && G.IndexOf(e) > G.IndexOf(e->TwinEdge())) continue;
+
+            int i = e->From();
+            int j = e->To();
+
+            double w = 0.0;
+            
+            // 左侧三角形
+            if (auto fL = e->Face()) {
+                int k = e->NextEdge()->To(); // 第三个顶点
+                // 计算 cot(angle_k)
+                // 边长: lij (e), ljk (next), lki (prev)
+                double lij = intrinsic_data.edge_length[G.IndexOf(e)];
+                double ljk = intrinsic_data.edge_length[G.IndexOf(e->NextEdge())];
+                double lki = intrinsic_data.edge_length[G.IndexOf(e->PrevEdge())];
+                w += CalcCot(lki, ljk, lij);
+            }
+
+            // 右侧三角形 (Twin)
+            if (auto t = e->TwinEdgeOr(nullptr)) {
+                if (auto fR = t->Face()) {
+                    int k = t->NextEdge()->To();
+                    double lij = intrinsic_data.edge_length[G.IndexOf(t)];
+                    double ljk = intrinsic_data.edge_length[G.IndexOf(t->NextEdge())];
+                    double lki = intrinsic_data.edge_length[G.IndexOf(t->PrevEdge())];
+                    w += CalcCot(lki, ljk, lij);
+                }
+            }
+
+            // Python 代码中系数是 0.5
+            w *= 0.5;
+
+            if (std::abs(w) > 1e-12) {
+                // 负半定：非对角线为正 w，对角线减去 w
+                // 等等，通常定义 L_pos_def = D - A (对角正，非对角负)
+                // Python tutorial 通常用的是 L_weak = - (D - A) 或者就是标准的 cotan 公式
+                // 让我们看 Python 代码... 通常是 L[i,j] = w, L[i,i] = -sum(w)
+                
+                Lt.emplace_back(i, j, w);
+                Lt.emplace_back(j, i, w);
+                diag_L[i] -= w;
+                diag_L[j] -= w;
+            }
+        }
+
+        for(int i=0; i<n; ++i) {
+            Lt.emplace_back(i, i, diag_L[i]);
+        }
+
+        L.resize(n, n);
+        L.setFromTriplets(Lt.begin(), Lt.end());
+        
+        M.resize(n, n);
+        M.setFromTriplets(Mt.begin(), Mt.end());
+    }*/
+    
     static inline void BuildCotanLaplacianAndMass(const DCEL& G,
-                                                  const IntrinsicData& intrinsic_data,
-                                                  Eigen::SparseMatrix<double>& L,
-                                                  Eigen::SparseMatrix<double>& M) {
+                    const IntrinsicData& intrinsic_data,
+                    Eigen::SparseMatrix<double>& L,
+                    Eigen::SparseMatrix<double>& M) {
         const int n = (int)G.NumOfVertices();
         std::vector<Eigen::Triplet<double>> Lt;
         Lt.reserve((size_t)G.NumOfFaces() * 9);
@@ -884,9 +994,9 @@ namespace VCX::Labs::GeometryProcessing {
 
                 auto getLenInFace = [&](int a, int b) -> double {
                     for (int kk = 0; kk < 3; ++kk) {
-                        auto ee = fL->Edge((DCEL::Label)kk);
-                        int x = (int)ee->From(), y = (int)ee->To();
-                        if ((x == a && y == b) || (x == b && y == a)) return intrinsic_data.edge_length[G.IndexOf(ee)];
+                    auto ee = fL->Edge((DCEL::Label)kk);
+                    int x = (int)ee->From(), y = (int)ee->To();
+                    if ((x == a && y == b) || (x == b && y == a)) return intrinsic_data.edge_length[G.IndexOf(ee)];
                     }
                     return 0.0;
                 };
@@ -901,12 +1011,12 @@ namespace VCX::Labs::GeometryProcessing {
                 if (auto fR = t->Face()) {
                     int k = (int)t->OppositeVertex();
                     auto getLenInFace = [&](int a, int b) -> double {
-                        for (int kk = 0; kk < 3; ++kk) {
-                            auto ee = fR->Edge((DCEL::Label)kk);
-                            int x = (int)ee->From(), y = (int)ee->To();
-                            if ((x == a && y == b) || (x == b && y == a)) return intrinsic_data.edge_length[G.IndexOf(ee)];
-                        }
-                        return 0.0;
+                    for (int kk = 0; kk < 3; ++kk) {
+                    auto ee = fR->Edge((DCEL::Label)kk);
+                    int x = (int)ee->From(), y = (int)ee->To();
+                    if ((x == a && y == b) || (x == b && y == a)) return intrinsic_data.edge_length[G.IndexOf(ee)];
+                    }
+                    return 0.0;
                     };
 
                     double ljk = getLenInFace(j, k);
@@ -943,7 +1053,7 @@ namespace VCX::Labs::GeometryProcessing {
     }
 
     static inline Eigen::VectorXd SolveSPD(const Eigen::SparseMatrix<double>& A,
-                                          const Eigen::VectorXd& b) {
+                    const Eigen::VectorXd& b) {
         // Prefer a direct sparse Cholesky; fall back to CG if it fails.
         Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> llt;
         llt.compute(A);
@@ -955,6 +1065,76 @@ namespace VCX::Labs::GeometryProcessing {
         cg.compute(A);
         return cg.solve(b);
     }
+/*
+    static inline Eigen::VectorXd ComputeDivergenceOfNormalizedGrad(
+        const DCEL& G,
+        const IntrinsicData& intrinsic_data,
+        const std::vector<double>& u)
+    {
+        const int n = (int)G.NumOfVertices();
+        Eigen::VectorXd div = Eigen::VectorXd::Zero(n);
+
+        for (auto f : G.Faces()) {
+            int v0 = f->VertexIndex(0);
+            int v1 = f->VertexIndex(1);
+            int v2 = f->VertexIndex(2);
+
+            // 1. 嵌入三角形到 2D
+            auto getLen = [&](int a, int b) {
+                for (int k = 0; k < 3; ++k) {
+                    auto e = f->Edge((DCEL::Label)k);
+                    int x = e->From(), y = e->To();
+                    if ((x == a && y == b) || (x == b && y == a)) 
+                        return intrinsic_data.edge_length[G.IndexOf(e)];
+                }
+                return 0.0;
+            };
+            double l01 = getLen(v0, v1);
+            double l12 = getLen(v1, v2);
+            double l20 = getLen(v2, v0);
+
+            glm::dvec2 p0, p1, p2;
+            if (!EmbedTriangle2D(l01, l12, l20, p0, p1, p2)) continue;
+
+            // 2. 计算面积和梯度基函数
+            double double_area = (p1.x - p0.x)*(p2.y - p0.y) - (p1.y - p0.y)*(p2.x - p0.x);
+            if (std::abs(double_area) < 1e-12) continue;
+            double area = 0.5 * std::abs(double_area);
+
+            // 旋转 90 度: (x, y) -> (y, -x)
+            // e0 = p1-p0, e1 = p2-p1, e2 = p0-p2
+            // grad_phi_2 = perp(p1-p0) / 2A
+            glm::dvec2 e0 = p1 - p0;
+            glm::dvec2 e1 = p2 - p1;
+            glm::dvec2 e2 = p0 - p2;
+
+            // 注意索引对应关系：对边索引
+            glm::dvec2 grad_N0 = Perp(e1) / double_area; // 对边是 e1 (v1-v2)
+            glm::dvec2 grad_N1 = Perp(e2) / double_area; // 对边是 e2 (v2-v0)
+            glm::dvec2 grad_N2 = Perp(e0) / double_area; // 对边是 e0 (v0-v1)
+
+            // 3. 计算 u 的梯度
+            // grad_u = u0 * grad_N0 + u1 * grad_N1 + u2 * grad_N2
+            glm::dvec2 grad_u = u[v0] * grad_N0 + u[v1] * grad_N1 + u[v2] * grad_N2;
+
+            // 4. 归一化并取反 (Heat Method 核心)
+            double len = glm::length(grad_u);
+            glm::dvec2 X;
+            if (len > 1e-12) {
+                X = -grad_u / len;
+            } else {
+                X = glm::dvec2(0, 0);
+            }
+
+            // 5. 累加散度 (FEM Weak Form: div_i = - dot(X, grad_Ni) * Area)
+            // 注意：这里 Area 会消掉分母中的 2A 的一部分
+            // div[v0] += - dot(X, grad_N0) * area
+            div[v0] -= glm::dot(X, grad_N0) * area;
+            div[v1] -= glm::dot(X, grad_N1) * area;
+            div[v2] -= glm::dot(X, grad_N2) * area;
+        }
+        return div;
+    }*/
 
     static inline Eigen::VectorXd ComputeDivergenceOfNormalizedGrad(
         const DCEL& G,
@@ -964,18 +1144,12 @@ namespace VCX::Labs::GeometryProcessing {
         const int n = (int)G.NumOfVertices();
         Eigen::VectorXd div = Eigen::VectorXd::Zero(n);
 
-        auto dot2 = [](const glm::dvec2& a, const glm::dvec2& b) {
-            return a.x * b.x + a.y * b.y;
-        };
-
         for (auto f : G.Faces()) {
-            int v[3] = {
-                (int)f->VertexIndex(0),
-                (int)f->VertexIndex(1),
-                (int)f->VertexIndex(2)
-            };
+            int v0 = (int)f->VertexIndex(0);
+            int v1 = (int)f->VertexIndex(1);
+            int v2 = (int)f->VertexIndex(2);
 
-            // edge lengths
+            // 获取边长
             auto getLen = [&](int a, int b) -> double {
                 for (int k = 0; k < 3; ++k) {
                     auto e = f->Edge((DCEL::Label)k);
@@ -986,48 +1160,53 @@ namespace VCX::Labs::GeometryProcessing {
                 return 0.0;
             };
 
-            double l01 = getLen(v[0], v[1]);
-            double l12 = getLen(v[1], v[2]);
-            double l20 = getLen(v[2], v[0]);
+            double l01 = getLen(v0, v1);
+            double l12 = getLen(v1, v2);
+            double l20 = getLen(v2, v0);
 
-            glm::dvec2 p[3];
-            if (!EmbedTriangle2D(l01, l12, l20, p[0], p[1], p[2])) continue;
+            glm::dvec2 p0, p1, p2;
+            if (!EmbedTriangle2D(l01, l12, l20, p0, p1, p2)) continue;
 
-            glm::dvec2 grad_u;
-            if (!FaceGradientIntrinsic(G, f, u, intrinsic_data, grad_u)) continue;
+            // 计算三角形面积
+            double twiceA = (p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x);
+            if (std::abs(twiceA) < 1e-12f) continue;
+            double inv2A = 1.0 / twiceA;
+            double area = 0.5 * std::abs(twiceA);
 
-            double norm = glm::length(grad_u);
-            glm::dvec2 X = {0, 0};
-            if (norm > 1e-12)
-                X = -grad_u / norm;
+            // 计算基函数的梯度向量 g_i
+            // 注意：Perp(v) = (v.y, -v.x) 是顺时针旋转
+            // 对于逆时针三角形，Perp(edge) 指向三角形外侧（远离对角顶点）
+            // 所以 g0 指向远离 v0 的方向 => g0 = -grad(phi_0)
+            glm::dvec2 g0 = Perp(p1 - p2) * inv2A;
+            glm::dvec2 g1 = Perp(p2 - p0) * inv2A;
+            glm::dvec2 g2 = Perp(p0 - p1) * inv2A;
 
-            // --- edge-based flux ---
-            for (int s = 0; s < 3; ++s) {
-                int i = v[s];
-                int j = v[(s + 1) % 3];
-                int k = v[(s + 2) % 3]; // opposite vertex
+            // 计算 u 的梯度
+            // grad_u_vec = u0*g0 + u1*g1 + u2*g2
+            // 因为 g_i = -grad(phi_i)，所以 grad_u_vec = -grad(u)
+            // 也就是说，grad_u_vec 指向 u 减小的方向（即远离热源的方向）
+            glm::dvec2 grad_u_vec = u[v0] * g0 + u[v1] * g1 + u[v2] * g2;
 
-                // edge vector in this face
-                glm::dvec2 eij = p[(s + 1) % 3] - p[s];
+            double norm = glm::length(grad_u_vec);
+            if (norm < 1e-12) continue;
 
-                // cot(angle at opposite vertex k)
-                double lij = getLen(i, j);
-                double lik = getLen(i, k);
-                double ljk = getLen(j, k);
-                double cot_k = CalcCot(lik, ljk, lij);
+            // 我们希望 X 是距离场的梯度，它应该指向远离源点的方向
+            // grad_u_vec 已经指向远离源点的方向了，所以直接归一化即可
+            glm::dvec2 X = grad_u_vec / norm;
 
-                double flux = 0.5 * cot_k * dot2(eij, X);
-
-                div[i] += flux;
-                div[j] -= flux;
-            }
+            // 计算散度贡献 (FEM Weak Form)
+            // b_i = integral(X . grad(phi_i))
+            //     = Area * (X . -g_i) 
+            //     = -Area * dot(X, g_i)
+            div[v0] -= area * glm::dot(X, g0);
+            div[v1] -= area * glm::dot(X, g1);
+            div[v2] -= area * glm::dot(X, g2);
         }
         return div;
-    }
-
+    }    
     void DistanceMap(Engine::SurfaceMesh const& input,
-                     Engine::SurfaceMesh& output,
-                     std::vector<int> const& sources) {
+                    Engine::SurfaceMesh& output,
+                    std::vector<int> const& sources) {
         output = input;
         DCEL G(output);
         const int n = (int)G.NumOfVertices();
@@ -1048,7 +1227,7 @@ namespace VCX::Labs::GeometryProcessing {
             ++cnt;
         }
         meanL = (cnt > 0) ? (meanL / (double)cnt) : 1.0;
-        double t = 0.1 * meanL * meanL;
+        double t = 10 * meanL * meanL;
         //alpha = 0.1   1
         // 4) Solve (M + tL) u = M δ
         Eigen::SparseMatrix<double> A = M + t * L;
@@ -1056,14 +1235,41 @@ namespace VCX::Labs::GeometryProcessing {
         Eigen::VectorXd b = Eigen::VectorXd::Zero(n);
         // Since M is diagonal (lumped), M*δ is just mass at source vertices.
         for (int s : sources) {
-            if (s >= 0 && s < n) b[s] = 1.0/*M.coeff(s, s)*/;
+            // if (s >= 0 && s < n) b[s] = 1.0 M.coeff(s, s);
+            b[s] = 1.0;
         }
 
 
         Eigen::VectorXd u_e = SolveSPD(A, b);
 
         std::vector<double> u((size_t)n, 0.0);
-        for (int i = 0; i < n; ++i) u[(size_t)i] = u_e[i];
+
+        double max_u = 0.0;
+        for (int i = 0; i < n; ++i) {
+            u[(size_t)i] = u_e[i];
+            max_u = std::max(max_u, u[(size_t)i]);
+        }
+
+//观察u
+        output.TexCoords.resize(n);
+        
+        if (max_u == 0) max_u = 1.0; // 防止除以零
+
+        // double frequency = 20.0; 
+
+        // for (int i = 0; i < n; ++i) {
+        //     // 1. 先归一化到 [0, 1] (相对距离)
+        //     double normalized_val = u[i] / max_u;
+            
+        //     // 2. 放大并取小数部分 (Fract / Modulo)
+        //     // 效果：0.0 -> 0.0,  0.05 -> 0.5,  0.1 -> 0.0 (重置), 0.15 -> 0.5 ...
+        //     double scaled = normalized_val * frequency;
+        //     double wrapped_val = scaled - std::floor(scaled); 
+
+        //     // 3. 写入 TexCoords
+        //     output.TexCoords[i] = glm::vec2(static_cast<float>(wrapped_val), 0.0f);
+        // }
+        // return;
 
         std::cout << "u range: [" << u_e.minCoeff()
           << ", " << u_e.maxCoeff() << "]\n";
@@ -1097,6 +1303,31 @@ namespace VCX::Labs::GeometryProcessing {
         // diagnostics (correct residual)
         Eigen::VectorXd r = Lreg * phi - divX;
         std::cout << "poisson residual norm=" << r.norm() << "\n";
+
+        output.TexCoords.resize(n);
+        
+        double max_phi = phi.maxCoeff();
+        if (max_phi == 0) max_phi = 1.0; // 防止除以零
+
+        // double frequency = 20.0; 
+        double frequency = 20;
+
+        for (int i = 0; i < n; ++i) {
+            // 1. 先归一化到 [0, 1] (相对距离)
+            double normalized_val = phi[i] / max_phi;
+            
+            // 2. 放大并取小数部分 (Fract / Modulo)
+            // 效果：0.0 -> 0.0,  0.05 -> 0.5,  0.1 -> 0.0 (重置), 0.15 -> 0.5 ...
+            double scaled = normalized_val * frequency;
+            double wrapped_val = scaled - std::floor(scaled); 
+
+            // 3. 写入 TexCoords
+            output.TexCoords[i] = glm::vec2(static_cast<float>(wrapped_val), 0.0f);
+        }
+        return;
+        
+        // 打印一下最终写入的范围，确认数值正常
+        std::cout << "Output TexCoords range: [0, " << max_phi << "]" << std::endl;
     }
 
 } // namespace VCX::Labs::GeometryProcessing
